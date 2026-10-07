@@ -1,0 +1,37 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Backups (mongodump output, archives)
+backups/
+*.archive
+*.gz
+
+# Runtime folders (contents ignored, folder kept via .gitkeep)
+server/uploads/*
+!server/uploads/.gitkeep
+server/temp/*
+!server/temp/.gitkeep
+
+# Build output
+dist/
+build/
+client/dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Coverage
+coverage/
