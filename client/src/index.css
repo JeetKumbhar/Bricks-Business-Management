@@ -1,0 +1,106 @@
+@import "@fontsource-variable/inter";
+@import "tailwindcss";
+
+/* =========================================================
+   BrickPro design tokens
+   Usage: bg-primary, text-fg, text-fg-muted, border-border ...
+   ========================================================= */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  /* Primary - actions, links, active states */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-soft: #eaf1ff;
+
+  /* Secondary - navy used by sidebar / header */
+  --color-secondary: #14284b;
+  --color-secondary-hover: #1d3766;
+  --color-secondary-soft: #e6ebf4;
+
+  /* Surfaces */
+  --color-background: #f5f7fb;
+  --color-surface: #ffffff;
+
+  /* Text */
+  --color-fg: #0f1f3d;
+  --color-fg-muted: #64748b;
+
+  /* Status */
+  --color-success: #16a34a;
+  --color-success-hover: #15803d;
+  --color-success-soft: #dcfce7;
+  --color-warning: #f59e0b;
+  --color-warning-hover: #d97706;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #ef4444;
+  --color-danger-hover: #dc2626;
+  --color-danger-soft: #fee2e2;
+
+  /* Lines */
+  --color-border: #e2e8f0;
+
+  --shadow-card: 0 1px 2px rgb(15 31 61 / 0.04), 0 1px 3px rgb(15 31 61 / 0.06);
+  --shadow-pop: 0 12px 32px rgb(15 31 61 / 0.18);
+
+  --animate-fade-in: fade-in 0.15s ease-out;
+  --animate-pop-in: pop-in 0.18s ease-out;
+  --animate-toast-in: toast-in 0.22s ease-out;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background font-sans text-fg antialiased;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+/* =========================================================
+   Typography roles
+   ========================================================= */
+@layer components {
+  .type-page-heading {
+    @apply text-2xl font-bold tracking-tight text-fg sm:text-[28px] sm:leading-9;
+  }
+  .type-section-heading {
+    @apply text-lg font-semibold text-fg;
+  }
+  .type-card-heading {
+    @apply text-base font-semibold text-fg;
+  }
+  .type-body {
+    @apply text-sm leading-6 text-fg;
+  }
+  .type-small {
+    @apply text-xs text-fg-muted;
+  }
+  .type-table {
+    @apply text-[13px] text-fg;
+  }
+  .type-button {
+    @apply text-sm font-semibold;
+  }
+}
