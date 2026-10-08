@@ -1,2 +1,13 @@
-import DesignPreview from "./pages/DesignPreview";
-export default function App() { return <DesignPreview />; }
+import { BrowserRouter } from "react-router-dom";
+import { ToastProvider } from "./components/ui";
+import AppRoutes from "./routes/AppRoutes";
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <ToastProvider>
+        <AppRoutes />
+      </ToastProvider>
+    </BrowserRouter>
+  );
+}
