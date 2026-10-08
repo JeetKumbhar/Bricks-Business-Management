@@ -26,7 +26,7 @@ export default function Dashboard() {
 
       <DashboardStats summary={data.summary} weeklyPaymentsTotal={data.weeklyPaymentsTotal} />
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
         <AttendanceSummary data={data.weeklyAttendance} className="lg:col-span-2" />
         <TruckStatus trucks={data.summary.trucks} attention={data.truckAttention} />
 

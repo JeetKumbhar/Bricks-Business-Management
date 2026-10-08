@@ -10,7 +10,9 @@ const palette = {
 };
 
 /**
- * Dashboard (solid) and Labour page (soft) summary tile.
+ * Summary tile. Phones: compact stacked layout (icon above value) so two fit per row.
+ * sm and up: icon on the left, text on the right.
+ *
  * <StatCard title="Total Labour" value={48} icon={Users} color="blue" actionLabel="View All" onAction={...} />
  * color: blue | green | yellow | red | purple     variant: solid | soft
  */
@@ -30,28 +32,29 @@ export default function StatCard({
   return (
     <div
       className={cn(
-        "flex items-center gap-4 rounded-xl p-4 shadow-card sm:p-5",
+        "flex flex-col items-start gap-2.5 rounded-xl p-3.5 shadow-card sm:flex-row sm:items-center sm:gap-4 sm:p-5",
         solid ? [c.solid, "text-white"] : ["border", c.soft, "text-fg"],
         className
       )}
     >
       <div
         className={cn(
-          "flex h-12 w-12 shrink-0 items-center justify-center rounded-full",
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-full sm:h-12 sm:w-12",
           solid ? "bg-white/20 text-white" : c.icon
         )}
       >
-        {Icon && <Icon className="h-6 w-6" aria-hidden="true" />}
+        {Icon && <Icon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />}
       </div>
-      <div className="min-w-0">
-        <p className={cn("text-sm", solid ? "text-white/90" : "text-fg-muted")}>{title}</p>
-        <p className="truncate text-3xl font-bold leading-tight">{value}</p>
+
+      <div className="min-w-0 max-w-full">
+        <p className={cn("text-xs sm:text-sm", solid ? "text-white/90" : "text-fg-muted")}>{title}</p>
+        <p className="truncate text-2xl font-bold leading-tight sm:text-3xl">{value}</p>
         {actionLabel && (
           <button
             type="button"
             onClick={onAction}
             className={cn(
-              "mt-1 inline-flex items-center gap-1 text-sm font-medium",
+              "mt-0.5 inline-flex items-center gap-1 py-1 text-xs font-medium sm:text-sm",
               solid ? "text-white/90 hover:text-white" : c.link
             )}
           >

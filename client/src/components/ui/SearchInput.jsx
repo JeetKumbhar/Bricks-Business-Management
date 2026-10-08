@@ -19,7 +19,7 @@ export default function SearchInput({ value = "", onChange, placeholder = "Searc
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
-        className={cn(fieldBase, fieldState(false), "h-10 pl-9 pr-9")}
+        className={cn(fieldBase, fieldState(false), "h-11 pl-9 pr-9 sm:h-10")}
         {...props}
       />
       {value && (

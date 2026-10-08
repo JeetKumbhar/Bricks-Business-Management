@@ -26,7 +26,7 @@ const DatePicker = forwardRef(function DatePicker(
         aria-required={required || undefined}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${dateId}-error` : hint ? `${dateId}-hint` : undefined}
-        className={cn(fieldBase, fieldState(error), "h-10 min-w-0", className)}
+        className={cn(fieldBase, fieldState(error), "h-11 min-w-0 sm:h-10", className)}
         {...props}
       />
     </FormField>

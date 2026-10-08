@@ -32,7 +32,7 @@ export default function DashboardStats({ summary, weeklyPaymentsTotal }) {
           variant={card.variant ?? "solid"}
           actionLabel={card.action}
           onAction={() => navigate(card.to)}
-          className={card.wide ? "col-span-2 lg:col-span-1" : undefined}
+          className={card.wide ? "col-span-2 flex-row items-center gap-3 lg:col-span-1" : undefined}
         />
       ))}
     </div>

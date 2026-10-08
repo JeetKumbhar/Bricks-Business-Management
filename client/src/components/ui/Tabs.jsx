@@ -42,7 +42,7 @@ export default function Tabs({ tabs, value, onChange, variant = "underline", ful
               "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-colors",
               fullWidth && "flex-1",
               pills
-                ? cn("rounded-md px-3 py-1.5", active ? "bg-surface text-fg shadow-card" : "text-fg-muted hover:text-fg")
+                ? cn("rounded-md px-3 py-2 sm:py-1.5", active ? "bg-surface text-fg shadow-card" : "text-fg-muted hover:text-fg")
                 : cn(
                     "-mb-px border-b-2 px-4 py-2.5",
                     active

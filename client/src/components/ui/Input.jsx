@@ -30,7 +30,7 @@ const Input = forwardRef(function Input(
           aria-required={required || undefined}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined}
-          className={cn(fieldBase, fieldState(error), "h-10", LeftIcon && "pl-9", className)}
+          className={cn(fieldBase, fieldState(error), "h-11 sm:h-10", LeftIcon && "pl-9", className)}
           {...props}
         />
       </div>

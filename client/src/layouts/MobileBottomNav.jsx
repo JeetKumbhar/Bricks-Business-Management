@@ -17,7 +17,7 @@ export default function MobileBottomNav() {
 
   const itemClass = (active) =>
     cn(
-      "flex flex-col items-center justify-center gap-1 py-2 text-[11px] font-medium transition-colors",
+      "flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-medium transition-colors",
       active ? "text-primary" : "text-fg-muted"
     );
 

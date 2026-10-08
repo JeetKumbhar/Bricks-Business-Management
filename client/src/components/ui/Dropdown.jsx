@@ -116,7 +116,7 @@ export default function Dropdown({
                     item.onClick?.();
                   }}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm disabled:cursor-not-allowed disabled:opacity-50",
+                    "flex w-full items-center gap-2.5 rounded-md px-3 py-3 text-left sm:py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50",
                     item.variant === "danger"
                       ? "text-danger hover:bg-danger-soft"
                       : "text-fg hover:bg-background"

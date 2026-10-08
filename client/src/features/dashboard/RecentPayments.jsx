@@ -28,12 +28,37 @@ const columns = [
   { key: "amount", header: "Amount", align: "right", className: "font-semibold", render: (p) => formatCurrency(p.amount) },
 ];
 
+/** Phones: simple list rows. md and up: table. */
 export default function RecentPayments({ payments, className }) {
   return (
     <Card className={className}>
       <CardHeader title="Recent Payments" icon={Receipt} action={<ViewAllButton to="/payments" />} />
       <CardBody>
-        <Table columns={columns} data={payments} rowKey="id" />
+        <ul className="divide-y divide-border md:hidden">
+          {payments.map((p) => {
+            const meta = PAYMENT_TYPE_META[p.type];
+            return (
+              <li key={p.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{p.labourName}</p>
+                  <p className="type-small">
+                    {formatDate(p.date)} - {p.labourId}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold">{formatCurrency(p.amount)}</p>
+                  <Badge variant={meta.variant} size="sm" className="mt-1">
+                    {meta.label}
+                  </Badge>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="hidden md:block">
+          <Table columns={columns} data={payments} rowKey="id" />
+        </div>
       </CardBody>
     </Card>
   );

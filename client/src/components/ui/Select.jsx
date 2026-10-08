@@ -24,7 +24,7 @@ const Select = forwardRef(function Select(
           aria-required={required || undefined}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${selectId}-error` : hint ? `${selectId}-hint` : undefined}
-          className={cn(fieldBase, fieldState(error), "h-10 appearance-none pr-9", className)}
+          className={cn(fieldBase, fieldState(error), "h-11 appearance-none pr-9 sm:h-10", className)}
           {...props}
         >
           {placeholder !== undefined && <option value="">{placeholder}</option>}

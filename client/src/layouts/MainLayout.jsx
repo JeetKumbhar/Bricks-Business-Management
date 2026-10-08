@@ -10,7 +10,7 @@ import Sidebar from "./Sidebar";
  */
 export default function MainLayout() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-white"
@@ -20,10 +20,10 @@ export default function MainLayout() {
 
       <Sidebar />
 
-      <div className="flex min-h-screen flex-col lg:pl-64">
+      <div className="flex min-h-dvh min-w-0 flex-col lg:pl-64">
         <Header />
         {/* pb-24 leaves room for the fixed bottom nav on mobile */}
-        <main id="main-content" className="flex-1 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:pb-8">
+        <main id="main-content" className="min-w-0 flex-1 px-4 py-4 pb-28 sm:px-6 lg:px-8 lg:pb-8">
           <Outlet />
         </main>
       </div>
