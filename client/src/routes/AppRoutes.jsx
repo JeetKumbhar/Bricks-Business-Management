@@ -3,11 +3,12 @@ import MainLayout from "../layouts/MainLayout";
 import PagePlaceholder from "../components/common/PagePlaceholder";
 import { Button, EmptyState } from "../components/ui";
 import DesignPreview from "../pages/DesignPreview";
+import Dashboard from "../pages/Dashboard";
 
 /*
  * Each <PagePlaceholder> is swapped for the real page in its own phase, e.g.
- *   import Dashboard from "../pages/Dashboard";
- *   <Route path="dashboard" element={<Dashboard />} />
+ *   import Labours from "../pages/LabourManagement";
+ *   <Route path="labours" element={<Labours />} />
  *
  * Auth phase: wrap the <MainLayout /> route in a <ProtectedRoute> and
  * redirect "/login" to "/dashboard" when already signed in.
@@ -39,7 +40,7 @@ export default function AppRoutes() {
       {/* App (sidebar / header / bottom nav) */}
       <Route element={<MainLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<PagePlaceholder title="Dashboard" />} />
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="labours" element={<PagePlaceholder title="Labour Management" />} />
         <Route path="labours/:id" element={<PagePlaceholder title="Labour Profile" />} />
         <Route path="attendance" element={<PagePlaceholder title="Attendance" />} />
