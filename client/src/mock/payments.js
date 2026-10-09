@@ -9,7 +9,7 @@ const daysAgo = (n) => {
   return toISODate(d);
 };
 
-export const initialPayments = labourSeeds.flatMap((seed, index) => {
+const generatedPayments = labourSeeds.flatMap((seed, index) => {
   const total = seed.totalReceived;
   if (!total) return [];
 
@@ -52,3 +52,21 @@ export const initialPayments = labourSeeds.flatMap((seed, index) => {
 
   return records;
 });
+
+// A few "Other" payments (a note is required for these).
+const otherPayments = [
+  { labourId: "L-002", ago: 4, amount: 500, note: "Medical help" },
+  { labourId: "L-005", ago: 9, amount: 300, note: "Festival gift" },
+  { labourId: "L-010", ago: 2, amount: 1000, note: "Phone repair" },
+].map((p, i) => ({
+  id: `pay-other-${i}`,
+  labourId: p.labourId,
+  date: daysAgo(p.ago),
+  type: "OTHER",
+  amount: p.amount,
+  method: "CASH",
+  note: p.note,
+  isDeleted: false,
+}));
+
+export const initialPayments = [...generatedPayments, ...otherPayments];

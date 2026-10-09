@@ -21,7 +21,7 @@ const formatId = (n) => `L-${String(n).padStart(3, "0")}`;
 export function LabourProvider({ children }) {
   const [baseLabours, setBaseLabours] = useState(initialLabours);
   const [attendance, setAttendance] = useState(initialAttendance);
-  const [payments] = useState(initialPayments); // setter arrives with the Payments phase
+  const [payments, setPayments] = useState(initialPayments);
   const [rateChanges, setRateChanges] = useState(initialRateHistory);
 
   const { attendanceBy, paymentsBy, ratesBy } = useMemo(() => {
@@ -126,6 +126,47 @@ export function LabourProvider({ children }) {
     });
   }, []);
 
+  /** All payments that are not deleted, newest first. */
+  const allPayments = useMemo(
+    () =>
+      payments
+        .filter((p) => !p.isDeleted)
+        .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
+    [payments]
+  );
+
+  const addPayment = useCallback(({ labourId, type, amount, date, note }) => {
+    const payment = {
+      id: `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      labourId,
+      type,
+      amount,
+      date,
+      method: "CASH", // mostly cash (docs/BUSINESS_RULES.md)
+      note: note ?? "",
+      isDeleted: false,
+      createdAt: new Date().toISOString(),
+    };
+    setPayments((prev) => [...prev, payment]);
+    return payment;
+  }, []);
+
+  /** Correct a payment (type / amount / date / note). The reason is mandatory and will go to the audit log. */
+  const updatePayment = useCallback((id, changes, reason) => {
+    setPayments((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, ...changes, editedReason: reason, updatedAt: new Date().toISOString() } : p))
+    );
+  }, []);
+
+  /** Wrong payments are deleted (soft delete: the record stays, balances ignore it). Reason is mandatory. */
+  const deletePayment = useCallback((id, reason) => {
+    setPayments((prev) =>
+      prev.map((p) =>
+        p.id === id ? { ...p, isDeleted: true, deletedReason: reason, deletedAt: new Date().toISOString() } : p
+      )
+    );
+  }, []);
+
   const getLabour = useCallback((id) => labours.find((l) => l.id === id), [labours]);
 
   /** Newest first, each record has units / rate / earned. */
@@ -157,9 +198,13 @@ export function LabourProvider({ children }) {
       getAttendanceByDate,
       saveAttendance,
       getPayments,
+      allPayments,
+      addPayment,
+      updatePayment,
+      deletePayment,
       getRateHistory,
     }),
-    [labours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, getRateHistory]
+    [labours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, addPayment, updatePayment, deletePayment, getRateHistory]
   );
 
   return <LabourContext.Provider value={value}>{children}</LabourContext.Provider>;

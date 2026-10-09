@@ -7,10 +7,12 @@ import Dashboard from "../pages/Dashboard";
 import LabourManagement from "../pages/LabourManagement";
 import LabourProfile from "../pages/LabourProfile";
 import Attendance from "../pages/Attendance";
+import Payments from "../pages/Payments";
 
 /*
  * Each <PagePlaceholder> is swapped for the real page in its own phase, e.g.
  *   import Attendance from "../pages/Attendance";
+import Payments from "../pages/Payments";
  *   <Route path="attendance" element={<Attendance />} />
  *
  * Auth phase: wrap the <MainLayout /> route in a <ProtectedRoute> and
@@ -47,7 +49,7 @@ export default function AppRoutes() {
         <Route path="labours" element={<LabourManagement />} />
         <Route path="labours/:id" element={<LabourProfile />} />
         <Route path="attendance" element={<Attendance />} />
-        <Route path="payments" element={<PagePlaceholder title="Payments" />} />
+        <Route path="payments" element={<Payments />} />
         <Route path="salary" element={<PagePlaceholder title="Salary" />} />
         <Route path="trucks" element={<PagePlaceholder title="Trucks" />} />
         <Route path="reports" element={<PagePlaceholder title="Reports" />} />
