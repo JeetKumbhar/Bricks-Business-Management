@@ -6,6 +6,7 @@ import DesignPreview from "../pages/DesignPreview";
 import Dashboard from "../pages/Dashboard";
 import LabourManagement from "../pages/LabourManagement";
 import LabourProfile from "../pages/LabourProfile";
+import Attendance from "../pages/Attendance";
 
 /*
  * Each <PagePlaceholder> is swapped for the real page in its own phase, e.g.
@@ -45,7 +46,7 @@ export default function AppRoutes() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="labours" element={<LabourManagement />} />
         <Route path="labours/:id" element={<LabourProfile />} />
-        <Route path="attendance" element={<PagePlaceholder title="Attendance" />} />
+        <Route path="attendance" element={<Attendance />} />
         <Route path="payments" element={<PagePlaceholder title="Payments" />} />
         <Route path="salary" element={<PagePlaceholder title="Salary" />} />
         <Route path="trucks" element={<PagePlaceholder title="Trucks" />} />

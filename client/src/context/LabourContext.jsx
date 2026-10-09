@@ -20,8 +20,8 @@ const formatId = (n) => `L-${String(n).padStart(3, "0")}`;
  */
 export function LabourProvider({ children }) {
   const [baseLabours, setBaseLabours] = useState(initialLabours);
-  const [attendance] = useState(initialAttendance); // setters arrive with the Attendance / Payments phases
-  const [payments] = useState(initialPayments);
+  const [attendance, setAttendance] = useState(initialAttendance);
+  const [payments] = useState(initialPayments); // setter arrives with the Payments phase
   const [rateChanges, setRateChanges] = useState(initialRateHistory);
 
   const { attendanceBy, paymentsBy, ratesBy } = useMemo(() => {
@@ -98,6 +98,34 @@ export function LabourProvider({ children }) {
     ]);
   }, []);
 
+  /** { [labourId]: status } for one day. */
+  const getAttendanceByDate = useCallback(
+    (date) => {
+      const map = {};
+      attendance.forEach((r) => {
+        if (r.date === date) map[r.labourId] = r.status;
+      });
+      return map;
+    },
+    [attendance]
+  );
+
+  /**
+   * Save (insert or update) one day's attendance. entries: [{ labourId, status }]
+   * One record per labour per date. Attendance can be edited (docs/BUSINESS_RULES.md).
+   */
+  const saveAttendance = useCallback((date, entries) => {
+    setAttendance((prev) => {
+      const byKey = new Map(prev.map((r) => [`${r.labourId}|${r.date}`, r]));
+      entries.forEach(({ labourId, status }) => {
+        const key = `${labourId}|${date}`;
+        const existing = byKey.get(key);
+        byKey.set(key, { id: existing?.id ?? `att-${labourId}-${date}`, labourId, date, status });
+      });
+      return [...byKey.values()];
+    });
+  }, []);
+
   const getLabour = useCallback((id) => labours.find((l) => l.id === id), [labours]);
 
   /** Newest first, each record has units / rate / earned. */
@@ -126,10 +154,12 @@ export function LabourProvider({ children }) {
       changeRate,
       getLabour,
       getAttendance,
+      getAttendanceByDate,
+      saveAttendance,
       getPayments,
       getRateHistory,
     }),
-    [labours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAttendance, getPayments, getRateHistory]
+    [labours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, getRateHistory]
   );
 
   return <LabourContext.Provider value={value}>{children}</LabourContext.Provider>;

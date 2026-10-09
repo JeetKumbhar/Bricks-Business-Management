@@ -38,7 +38,7 @@ export const initialAttendance = labourSeeds.flatMap((seed, index) => {
   return statuses.map((status, i) => ({
     id: `att-${seed.id}-${i}`,
     labourId: seed.id,
-    date: daysAgo(offset + i),
+    date: daysAgo(offset + 1 + i), // starts yesterday: today is left unmarked so you can try the daily screen
     status,
   }));
 });
