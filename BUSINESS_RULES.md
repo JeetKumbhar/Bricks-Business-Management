@@ -16,14 +16,19 @@ Legend: **[Decided]** = confirmed by the owner. **[Proposed]** = suggested defau
 | Address | **[Decided]** Only the village name (`village`, text) |
 | Photo | **[Decided]** Optional |
 | Joining date | **[Proposed]** Required. Attendance cannot be marked before it |
-| Daily rate | **[Decided]** Required. Differs from labour to labour |
+| Daily rate | **[Decided]** Required. Differs from labour to labour and can change over time (see rate change rules) |
 | Status | **[Decided]** `ACTIVE` / `INACTIVE`. Labour can leave and return |
 
 **Leave and return — [Decided]:** labour is never deleted. Leaving sets `INACTIVE`; returning re-activates the same record, and all old attendance, payments and balance stay intact.
 
 **Rate change rules**
-- **[Decided]** The rate does not change once set.
-- **[Proposed]** If a correction is ever unavoidable, only the Owner can do it. It creates a `LabourRateHistory` entry (old rate, new rate, effective date, reason, changed by). Old attendance keeps the rate it was earned at; the new rate applies from the effective date only.
+- **[Decided]** A labour's daily rate **can change**, so every change is kept in a rate history (Labour Profile > Rate History tab).
+- **[Proposed]** Only the Owner can change a rate. Each change stores: old rate, new rate, effective date, reason (required), who changed it and when.
+- **[Proposed]** The new rate applies **from the effective date forward**. Attendance before that date keeps the rate it was earned at, so earned salary = sum of (units x the rate in force on that day).
+- **[Proposed]** The effective date must be after the previous change. A future date is allowed and shows as "Scheduled" until it arrives.
+- **[Proposed]** The rate is not edited in the normal Edit Labour form (it is shown read-only there); it is changed only through Rate History.
+
+---
 
 ## 2. Attendance
 

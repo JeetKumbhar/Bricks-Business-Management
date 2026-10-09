@@ -49,3 +49,10 @@ export const getGreeting = (value = new Date()) => {
   if (hour < 17) return "Good Afternoon";
   return "Good Evening";
 };
+
+/** addDaysISO("2026-10-08", -1) -> "2026-10-07"  (pure date maths, no timezone drift) */
+export const addDaysISO = (iso, days) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};

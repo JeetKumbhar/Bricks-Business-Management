@@ -5,6 +5,7 @@ import { Button, EmptyState } from "../components/ui";
 import DesignPreview from "../pages/DesignPreview";
 import Dashboard from "../pages/Dashboard";
 import LabourManagement from "../pages/LabourManagement";
+import LabourProfile from "../pages/LabourProfile";
 
 /*
  * Each <PagePlaceholder> is swapped for the real page in its own phase, e.g.
@@ -43,7 +44,7 @@ export default function AppRoutes() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="labours" element={<LabourManagement />} />
-        <Route path="labours/:id" element={<PagePlaceholder title="Labour Profile" />} />
+        <Route path="labours/:id" element={<LabourProfile />} />
         <Route path="attendance" element={<PagePlaceholder title="Attendance" />} />
         <Route path="payments" element={<PagePlaceholder title="Payments" />} />
         <Route path="salary" element={<PagePlaceholder title="Salary" />} />

@@ -11,8 +11,9 @@ export const percentage = (part, total) => (total ? Math.round((part / total) * 
 /** Payable days: presentDays + 0.5 x halfDays */
 export const attendanceDays = ({ presentDays = 0, halfDays = 0 }) => presentDays + halfDays * 0.5;
 
-/** earned = days x dailyRate */
-export const calculateEarned = (labour) => attendanceDays(labour) * (labour.dailyRate || 0);
+/** earned = sum of (units x rate in force on that day). Falls back to days x dailyRate. */
+export const calculateEarned = (labour) =>
+  labour.earned ?? attendanceDays(labour) * (labour.dailyRate || 0); // `earned` (rate-history aware) wins when present
 
 /** balance = earned - received. Negative means overpaid (shown in red). */
 export const calculateBalance = (labour) => calculateEarned(labour) - (labour.totalReceived || 0);

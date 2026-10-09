@@ -56,7 +56,7 @@ export default function LabourForm({ formId, defaultValues, labourId, rateLocked
         min="1"
         leftIcon={IndianRupee}
         readOnly={rateLocked}
-        hint={rateLocked ? "Rate is fixed once set" : undefined}
+        hint={rateLocked ? "Change it from Rate History in the profile" : undefined}
         className={rateLocked ? "cursor-not-allowed bg-background text-fg-muted" : undefined}
         error={errors.dailyRate?.message}
         {...register("dailyRate")}
