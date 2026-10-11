@@ -1,8 +1,14 @@
-// Mock labour records.
+// Mock labour records. Every record has a `labourType` and ONLY the rate field of its own type:
+//   BIGARI    -> dailyRate
+//   MAAPVALI  -> ratePerMaap
+//   PATLAVALE -> ratePer1000PayableBricks   (a family / team; `name` is the team name)
 //
-// `labourSeeds`   - raw numbers used to generate attendance + payments (see attendance.js, payments.js)
-// `initialLabours` - the labour records themselves (no totals: those are calculated from
-//                    attendance, payments and rate history in features/labours/labourStats.js)
+// `labourSeeds`      - Bigari numbers used to generate attendance + payments (attendance.js, payments.js)
+// `maapvaliRecords`, `patlavaleRecords` - the other two types (used by maapEntries.js, production.js, payments.js)
+// `initialLabours`   - all records of all types. Totals are never stored: they are calculated.
+//
+// IDs share one sequence: L-001..L-048 Bigari, L-049..L-054 Maapvali, L-055..L-058 Patlavale.
+// All rates below for Maapvali and Patlavale are ILLUSTRATIVE, not agreed rates.
 import { toISODate } from "../utils/formatDate";
 
 const daysAgo = (n) => {
@@ -66,6 +72,7 @@ export const labourSeeds = [...firstTen, ...generated].map(
     const needed = presentDays + halfDays + absentDays + (status === "INACTIVE" ? 7 : 0) + 5;
     return {
       id: makeId(index + 1),
+      labourType: "BIGARI",
       name,
       mobile,
       village,
@@ -80,8 +87,9 @@ export const labourSeeds = [...firstTen, ...generated].map(
   }
 );
 
-export const initialLabours = labourSeeds.map(({ id, name, mobile, village, dailyRate, status, joiningDate }) => ({
+const bigariRecords = labourSeeds.map(({ id, labourType, name, mobile, village, dailyRate, status, joiningDate }) => ({
   id,
+  labourType,
   name,
   mobile,
   village,
@@ -90,3 +98,44 @@ export const initialLabours = labourSeeds.map(({ id, name, mobile, village, dail
   joiningDate,
   photo: null, // optional
 }));
+
+// Maapvali: individual workers, each with their own ratePerMaap.
+export const maapvaliRecords = [
+  ["L-049", "Dattu Gaikwad", "9822001049", "Sinnar", 22, "ACTIVE", 90],
+  ["L-050", "Baban Shinde", "9822001050", "Dindori", 24, "ACTIVE", 88],
+  ["L-051", "Kailas More", "9822001051", "Niphad", 25, "ACTIVE", 85],
+  ["L-052", "Sopan Pawar", "9822001052", "Igatpuri", 20, "ACTIVE", 80],
+  ["L-053", "Ramdas Kale", "9822001053", "Yeola", 26, "INACTIVE", 78],
+  ["L-054", "Anna Chavan", "9822001054", "Satana", 28, "ACTIVE", 60],
+].map(([id, name, mobile, village, ratePerMaap, status, joinedDaysAgo]) => ({
+  id,
+  labourType: "MAAPVALI",
+  name,
+  mobile,
+  village,
+  ratePerMaap,
+  status,
+  joiningDate: daysAgo(joinedDaysAgo),
+  photo: null,
+}));
+
+// Patlavale: one record per family / team. Members are optional reference details only.
+export const patlavaleRecords = [
+  ["L-055", "Ganpat Jadhav Family", "9822002055", "Sinnar", 650, 100, [["Ganpat Jadhav", "Head"], ["Sunita Jadhav", "Wife"], ["Rahul Jadhav", "Son"]]],
+  ["L-056", "Bhika Waghmare Family", "9822002056", "Dindori", 700, 98, [["Bhika Waghmare", "Head"], ["Laxmi Waghmare", "Wife"]]],
+  ["L-057", "Tukaram Gaikwad Family", "9822002057", "Niphad", 620, 95, []],
+  ["L-058", "Shankar Kale Family", "9822002058", "Yeola", 680, 90, [["Shankar Kale", "Head"], ["Meena Kale", "Wife"], ["Vishal Kale", "Son"], ["Pooja Kale", "Daughter"]]],
+].map(([id, name, mobile, village, ratePer1000PayableBricks, joinedDaysAgo, members]) => ({
+  id,
+  labourType: "PATLAVALE",
+  name,
+  mobile,
+  village,
+  ratePer1000PayableBricks,
+  status: "ACTIVE",
+  joiningDate: daysAgo(joinedDaysAgo),
+  photo: null,
+  ...(members.length ? { members: members.map(([memberName, relation]) => ({ name: memberName, relation })) } : {}),
+}));
+
+export const initialLabours = [...bigariRecords, ...maapvaliRecords, ...patlavaleRecords];

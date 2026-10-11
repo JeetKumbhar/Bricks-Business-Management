@@ -4,11 +4,19 @@ import { initialAttendance } from "../mock/attendance";
 import { initialLabours } from "../mock/labours";
 import { initialPayments } from "../mock/payments";
 import { initialRateHistory } from "../mock/rateHistory";
+import { validateMocks } from "../mock/validateMocks";
 
 export const LabourContext = createContext(null);
 
 // TODO (auth phase): use the logged-in user.
 const CURRENT_USER = "Ramesh Patel";
+
+// Development only: check every mock record against its schema once and report in the browser console.
+if (import.meta.env.DEV) {
+  const result = validateMocks();
+  if (result.ok) console.info("[mock data] all records valid", result.counts);
+  else console.error(`[mock data] ${result.errors.length} problem(s) found`, result.errors);
+}
 
 const idNumber = (id) => Number(id.replace(/\D/g, ""));
 const formatId = (n) => `L-${String(n).padStart(3, "0")}`;
@@ -34,7 +42,12 @@ export function LabourProvider({ children }) {
   }, [attendance, payments, rateChanges]);
 
   const labours = useMemo(
-    () => baseLabours.map((l) => buildLabourStats(l, attendanceBy[l.id], paymentsBy[l.id], ratesBy[l.id])),
+    () =>
+      baseLabours
+        // Existing screens are attendance-based, so they only show BIGARI workers for now.
+        // Maapvali and Patlavale records exist in the data and get their own screens in later phases.
+        .filter((l) => l.labourType === "BIGARI")
+        .map((l) => buildLabourStats(l, attendanceBy[l.id], paymentsBy[l.id], ratesBy[l.id])),
     [baseLabours, attendanceBy, paymentsBy, ratesBy]
   );
 
@@ -48,6 +61,7 @@ export function LabourProvider({ children }) {
     (values) => {
       const labour = {
         id: nextLabourId,
+        labourType: "BIGARI", // other types get their own forms in the next phases
         name: values.name,
         mobile: values.mobile,
         village: values.village,
@@ -62,6 +76,7 @@ export function LabourProvider({ children }) {
         {
           id: `rate-${labour.id}-0`,
           labourId: labour.id,
+          rateType: "DAILY_RATE",
           rate: values.dailyRate,
           effectiveFrom: values.joiningDate,
           reason: "Initial rate",
@@ -89,6 +104,7 @@ export function LabourProvider({ children }) {
       {
         id: `rate-${labourId}-${Date.now()}`,
         labourId,
+        rateType: "DAILY_RATE",
         rate,
         effectiveFrom,
         reason,
@@ -126,19 +142,24 @@ export function LabourProvider({ children }) {
     });
   }, []);
 
-  /** All payments that are not deleted, newest first. */
+  /** Payments that are not deleted and belong to a labour the current screens show, newest first. */
+  const visibleLabourIds = useMemo(() => new Set(labours.map((l) => l.id)), [labours]);
   const allPayments = useMemo(
     () =>
       payments
-        .filter((p) => !p.isDeleted)
+        .filter((p) => !p.isDeleted && visibleLabourIds.has(p.labourId))
         .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
-    [payments]
+    [payments, visibleLabourIds]
   );
 
-  const addPayment = useCallback(({ labourId, type, amount, date, note }) => {
+  const addPayment = useCallback(
+    ({ labourId, type, amount, date, note }) => {
+    const recipient = baseLabours.find((l) => l.id === labourId);
     const payment = {
       id: `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      labourId,
+      recipientType: recipient?.labourType === "PATLAVALE" ? "TEAM" : "WORKER",
+      recipientId: labourId,
+      labourId, // legacy alias of recipientId (existing screens still read it)
       type,
       amount,
       date,
@@ -149,7 +170,9 @@ export function LabourProvider({ children }) {
     };
     setPayments((prev) => [...prev, payment]);
     return payment;
-  }, []);
+    },
+    [baseLabours]
+  );
 
   /** Correct a payment (type / amount / date / note). The reason is mandatory and will go to the audit log. */
   const updatePayment = useCallback((id, changes, reason) => {

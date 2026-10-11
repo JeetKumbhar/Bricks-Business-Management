@@ -54,7 +54,7 @@ export default function PaymentsTab({ labour, payments }) {
 
   const tabs = [
     { id: "ALL", label: "All", count: counts.ALL },
-    { id: "BOOKING_ADVANCE", label: "Advance", count: counts.BOOKING_ADVANCE },
+    { id: "BOOKING_ADVANCE", label: "Bayana", count: counts.BOOKING_ADVANCE },
     { id: "SALARY_PAYMENT", label: "Salary", count: counts.SALARY_PAYMENT },
     { id: "OTHER", label: "Other", count: counts.OTHER },
   ];
@@ -64,7 +64,7 @@ export default function PaymentsTab({ labour, payments }) {
       <CardHeader title="Payments" subtitle={`${filtered.length} records`} icon={Receipt} />
       <CardBody className="space-y-4">
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          <StatTile label="Booking Advance" value={formatCurrency(labour.bookingAdvance)} />
+          <StatTile label="Bayana" value={formatCurrency(labour.bookingAdvance)} />
           <StatTile label="Salary Payments" value={formatCurrency(labour.salaryPayments)} />
           <StatTile label="Total Received" value={formatCurrency(labour.totalReceived)} />
         </div>

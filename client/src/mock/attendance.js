@@ -24,6 +24,7 @@ const shuffle = (items, rand) => {
   return a;
 };
 
+// Attendance is recorded for BIGARI workers only (it is not the earnings basis for Maapvali or Patlavale).
 export const initialAttendance = labourSeeds.flatMap((seed, index) => {
   const statuses = shuffle(
     [

@@ -1,7 +1,7 @@
 // Payment records generated so each labour's payments add up to `totalReceived` in mock/labours.js.
 // Shape: { id, labourId, date, type: BOOKING_ADVANCE | SALARY_PAYMENT | OTHER, amount, method, note, isDeleted }
 import { toISODate } from "../utils/formatDate";
-import { labourSeeds } from "./labours";
+import { labourSeeds, maapvaliRecords, patlavaleRecords } from "./labours";
 
 const daysAgo = (n) => {
   const d = new Date();
@@ -69,4 +69,41 @@ const otherPayments = [
   isDeleted: false,
 }));
 
-export const initialPayments = [...generatedPayments, ...otherPayments];
+// Payments to Maapvali workers and Patlavale teams (amounts are illustrative).
+// [recipientId, bayana, [[daysAgo, amount], ...salary payments]]
+const otherTypePayments = [
+  ["L-049", 3000, [[20, 2500], [9, 3000]]],
+  ["L-050", 3000, [[18, 3500]]],
+  ["L-051", 2500, [[15, 2000], [6, 2500]]],
+  ["L-052", 2000, [[12, 1500]]],
+  ["L-053", 2500, [[25, 2000]]],
+  ["L-054", 2000, [[5, 1800]]],
+  ["L-055", 25000, [[40, 12000], [14, 10000]]],
+  ["L-056", 30000, [[35, 15000], [10, 12000]]],
+  ["L-057", 20000, [[30, 8000]]],
+  ["L-058", 20000, [[28, 9000], [7, 8000]]],
+].flatMap(([recipientId, bayana, salaries]) => {
+  const labour = [...maapvaliRecords, ...patlavaleRecords].find((l) => l.id === recipientId);
+  const recipientType = labour.labourType === "PATLAVALE" ? "TEAM" : "WORKER";
+  const make = (suffix, date, type, amount) => ({
+    id: `pay-${recipientId}-${suffix}`,
+    labourId: recipientId, // legacy alias, same as recipientId
+    recipientType,
+    recipientId,
+    date,
+    type,
+    amount,
+    method: "CASH",
+    note: "",
+    isDeleted: false,
+  });
+  return [
+    make("bayana", labour.joiningDate, "BOOKING_ADVANCE", bayana),
+    ...salaries.map(([ago, amount], i) => make(`s${i + 1}`, daysAgo(ago), "SALARY_PAYMENT", amount)),
+  ];
+});
+
+// Every payment names its recipient. Bigari payments are to a WORKER.
+const withRecipient = (p) => ({ recipientType: "WORKER", recipientId: p.labourId, ...p });
+
+export const initialPayments = [...[...generatedPayments, ...otherPayments].map(withRecipient), ...otherTypePayments];

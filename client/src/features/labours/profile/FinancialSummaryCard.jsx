@@ -22,7 +22,7 @@ export default function FinancialSummaryCard({ labour, className }) {
       <CardBody>
         <div className="divide-y divide-border">
           <Row label="Earned Salary" value={formatCurrency(labour.earned)} />
-          <Row label="Booking Advance" value={formatCurrency(labour.bookingAdvance)} />
+          <Row label="Bayana (Booking Advance)" value={formatCurrency(labour.bookingAdvance)} />
           <Row label="Salary Payments" value={formatCurrency(labour.salaryPayments)} />
           {labour.otherPayments > 0 && <Row label="Other Payments" value={formatCurrency(labour.otherPayments)} />}
           <Row label="Total Received" value={formatCurrency(labour.totalReceived)} strong />

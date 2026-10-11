@@ -7,7 +7,8 @@ export const PAYMENT_TYPES = {
 
 // Label + Badge variant for each type
 export const PAYMENT_TYPE_META = {
-  BOOKING_ADVANCE: { label: "Booking Advance", variant: "info" },
-  SALARY_PAYMENT: { label: "Salary Payment", variant: "success" },
-  OTHER: { label: "Other", variant: "neutral" },
+  // BOOKING_ADVANCE stays the stored value; the interface uses the client's familiar word "Bayana".
+  BOOKING_ADVANCE: { label: "Bayana (Booking Advance)", shortLabel: "Bayana", variant: "info" },
+  SALARY_PAYMENT: { label: "Salary Payment", shortLabel: "Salary", variant: "success" },
+  OTHER: { label: "Other", shortLabel: "Other", variant: "neutral" },
 };

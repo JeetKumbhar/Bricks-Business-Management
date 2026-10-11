@@ -4,7 +4,7 @@ import { Card, CardBody, SearchInput, Tabs } from "../../components/ui";
 export default function PaymentFilters({ search, onSearchChange, type, onTypeChange, counts }) {
   const tabs = [
     { id: "ALL", label: "All", count: counts.ALL },
-    { id: "BOOKING_ADVANCE", label: "Advance", count: counts.BOOKING_ADVANCE },
+    { id: "BOOKING_ADVANCE", label: "Bayana", count: counts.BOOKING_ADVANCE },
     { id: "SALARY_PAYMENT", label: "Salary", count: counts.SALARY_PAYMENT },
     { id: "OTHER", label: "Other", count: counts.OTHER },
   ];

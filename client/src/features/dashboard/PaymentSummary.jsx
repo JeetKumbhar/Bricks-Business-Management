@@ -8,7 +8,7 @@ import { chartColors } from "./chartColors";
 import ViewAllButton from "./ViewAllButton";
 
 const series = [
-  { key: "bookingAdvance", label: "Booking Advance", color: chartColors.bookingAdvance },
+  { key: "bookingAdvance", label: "Bayana", color: chartColors.bookingAdvance },
   { key: "salaryPayment", label: "Salary Payment", color: chartColors.salaryPayment },
   { key: "other", label: "Other", color: chartColors.other },
 ];

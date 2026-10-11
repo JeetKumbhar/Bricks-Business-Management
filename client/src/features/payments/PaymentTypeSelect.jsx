@@ -2,7 +2,7 @@ import { cn } from "../../utils/cn";
 import { PAYMENT_TYPES } from "../../utils/paymentTypes";
 
 const options = [
-  { value: PAYMENT_TYPES.BOOKING_ADVANCE, label: "Booking Advance" },
+  { value: PAYMENT_TYPES.BOOKING_ADVANCE, label: "Bayana (Booking Advance)" },
   { value: PAYMENT_TYPES.SALARY_PAYMENT, label: "Salary Payment" },
   { value: PAYMENT_TYPES.OTHER, label: "Other" },
 ];
