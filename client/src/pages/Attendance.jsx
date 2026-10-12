@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Save } from "lucide-react";
+import { Info, Save } from "lucide-react";
 import { Button, ConfirmDialog, useToast } from "../components/ui";
 import AttendanceDateBar from "../features/attendance/AttendanceDateBar";
 import AttendanceList from "../features/attendance/AttendanceList";
-import { getEligibleLabours, summarize } from "../features/attendance/attendanceSelectors";
+import {
+  countExcludedTypes,
+  explainEmptyRoster,
+  getEligibleLabours,
+  summarize,
+} from "../features/attendance/attendanceSelectors";
 import AttendanceSummaryBar from "../features/attendance/AttendanceSummaryBar";
 import AttendanceToolbar from "../features/attendance/AttendanceToolbar";
 import { filterLabours } from "../features/labours/labourSelectors";
@@ -11,12 +16,13 @@ import useLabours from "../features/labours/useLabours";
 import { formatDate, toISODate } from "../utils/formatDate";
 
 /**
- * Daily attendance sheet.
+ * Daily attendance sheet. BIGARI workers only: attendance is never the earnings basis for Maapvali or Patlavale.
  * `draft` holds only the taps made since the last save; a labour's shown status is draft ?? saved ?? null.
  */
 export default function Attendance() {
   const toast = useToast();
-  const { labours, getAttendanceByDate, saveAttendance } = useLabours();
+  // allLabours holds every type; the roster below keeps only active Bigari workers.
+  const { allLabours, getAttendanceByDate, saveAttendance } = useLabours();
 
   const today = toISODate();
   const [date, setDate] = useState(today);
@@ -27,7 +33,9 @@ export default function Attendance() {
   const [confirmSave, setConfirmSave] = useState(false);
 
   const saved = useMemo(() => getAttendanceByDate(date), [getAttendanceByDate, date]);
-  const eligible = useMemo(() => getEligibleLabours(labours, date, saved), [labours, date, saved]);
+  const eligible = useMemo(() => getEligibleLabours(allLabours, date, saved), [allLabours, date, saved]);
+  const excluded = useMemo(() => countExcludedTypes(allLabours), [allLabours]);
+  const emptyRoster = useMemo(() => explainEmptyRoster(allLabours), [allLabours]);
 
   const statusOf = useCallback((id) => draft[id] ?? saved[id] ?? null, [draft, saved]);
   const counts = useMemo(() => summarize(eligible, statusOf), [eligible, statusOf]);
@@ -104,10 +112,21 @@ export default function Attendance() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="type-page-heading">Attendance</h1>
-          <p className="mt-1 text-sm text-fg-muted">Mark who worked today: present, half day or absent.</p>
+          <p className="mt-1 text-sm text-fg-muted">Mark Bigari workers: present, half day or absent.</p>
         </div>
         <div className="hidden lg:block">{saveButton()}</div>
       </div>
+
+      <p className="flex items-start gap-2 rounded-lg bg-background px-3 py-2.5 text-xs text-fg-muted">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span>
+          Attendance is for <strong className="font-semibold text-fg">Bigari workers</strong> only. Maapvali are paid per maap and
+          Patlavale teams per 1,000 payable bricks, so they are not listed here
+          {excluded.maapvali + excluded.patlavale > 0
+            ? ` (${excluded.maapvali} Maapvali, ${excluded.patlavale} ${excluded.patlavale === 1 ? "team" : "teams"}).`
+            : "."}
+        </span>
+      </p>
 
       <AttendanceDateBar date={date} today={today} onChange={requestDateChange} />
 
@@ -127,12 +146,18 @@ export default function Attendance() {
         labours={visible}
         statusOf={statusOf}
         onChange={handleChange}
-        emptyTitle={eligible.length === 0 ? "No labour for this date" : filter === "UNMARKED" && !search.trim() ? "Everyone is marked" : "No labour found"}
+        emptyTitle={
+          eligible.length === 0
+            ? emptyRoster.title
+            : filter === "UNMARKED" && !search.trim()
+              ? "Everyone is marked"
+              : "No Bigari worker found"
+        }
         emptyDescription={
           eligible.length === 0
-            ? "Active labour who had joined by this date appear here."
+            ? emptyRoster.description
             : filter === "UNMARKED" && !search.trim()
-              ? "Every labour has a status for this day."
+              ? "Every Bigari worker has a status for this day."
               : "Try a different search."
         }
       />

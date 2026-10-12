@@ -161,17 +161,28 @@ export function LabourProvider({ children }) {
    * Save (insert or update) one day's attendance. entries: [{ labourId, status }]
    * One record per labour per date. Attendance can be edited (docs/BUSINESS_RULES.md).
    */
-  const saveAttendance = useCallback((date, entries) => {
-    setAttendance((prev) => {
-      const byKey = new Map(prev.map((r) => [`${r.labourId}|${r.date}`, r]));
-      entries.forEach(({ labourId, status }) => {
-        const key = `${labourId}|${date}`;
-        const existing = byKey.get(key);
-        byKey.set(key, { id: existing?.id ?? `att-${labourId}-${date}`, labourId, date, status });
+  const saveAttendance = useCallback(
+    (date, entries) => {
+      // Attendance belongs to BIGARI workers only. Entries for anyone else are dropped, so a Maapvali or a
+      // Patlavale team can never get attendance records (or attendance earnings) by mistake.
+      const bigariIds = new Set(baseLabours.filter((l) => l.labourType === LABOUR_TYPES.BIGARI).map((l) => l.id));
+      const valid = entries.filter((entry) => bigariIds.has(entry.labourId));
+      if (import.meta.env.DEV && valid.length !== entries.length) {
+        console.warn(`[attendance] ignored ${entries.length - valid.length} entries for non-Bigari labour`);
+      }
+
+      setAttendance((prev) => {
+        const byKey = new Map(prev.map((r) => [`${r.labourId}|${r.date}`, r]));
+        valid.forEach(({ labourId, status }) => {
+          const key = `${labourId}|${date}`;
+          const existing = byKey.get(key);
+          byKey.set(key, { id: existing?.id ?? `att-${labourId}-${date}`, labourId, date, status });
+        });
+        return [...byKey.values()];
       });
-      return [...byKey.values()];
-    });
-  }, []);
+    },
+    [baseLabours]
+  );
 
   /** Payments that are not deleted and belong to a labour the current screens show, newest first. */
   const visibleLabourIds = useMemo(() => new Set(labours.map((l) => l.id)), [labours]);
