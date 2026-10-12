@@ -5,19 +5,23 @@ import { Button, ConfirmDialog, useToast } from "../components/ui";
 import AddLabourModal from "../features/labours/AddLabourModal";
 import EditLabourModal from "../features/labours/EditLabourModal";
 import LabourFilters from "../features/labours/LabourFilters";
+import { toLabourInput } from "../features/labours/labourRecord";
 import { filterLabours, getLabourCounts } from "../features/labours/labourSelectors";
 import LabourSummaryCards from "../features/labours/LabourSummaryCards";
 import LabourTable from "../features/labours/LabourTable";
+import LabourTypeSummary from "../features/labours/LabourTypeSummary";
 import useLabours from "../features/labours/useLabours";
 import { LABOUR_STATUS } from "../utils/labourStatus";
 
 export default function LabourManagement() {
   const navigate = useNavigate();
   const toast = useToast();
-  const { labours, nextLabourId, addLabour, updateLabour, isMobileTaken } = useLabours();
+  // allLabours = every worker and team (all three types)
+  const { allLabours: labours, nextLabourId, addLabour, updateLabour, isMobileTaken } = useLabours();
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [typeFilter, setTypeFilter] = useState("ALL");
   const [page, setPage] = useState(1);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -25,8 +29,11 @@ export default function LabourManagement() {
   const [toggling, setToggling] = useState(null); // labour whose status is being changed
 
   const counts = useMemo(() => getLabourCounts(labours), [labours]);
-  const filtered = useMemo(() => filterLabours(labours, { search, status }), [labours, search, status]);
-  const hasFilters = search.trim() !== "" || status !== "ALL";
+  const filtered = useMemo(
+    () => filterLabours(labours, { search, status, type: typeFilter }),
+    [labours, search, status, typeFilter]
+  );
+  const hasFilters = search.trim() !== "" || status !== "ALL" || typeFilter !== "ALL";
 
   const handleSearch = (value) => {
     setSearch(value);
@@ -36,24 +43,27 @@ export default function LabourManagement() {
     setStatus(value);
     setPage(1);
   };
+  const handleType = (value) => {
+    setTypeFilter(value);
+    setPage(1);
+  };
   const clearFilters = () => {
     setSearch("");
     setStatus("ALL");
+    setTypeFilter("ALL");
     setPage(1);
   };
 
   const handleAdd = (values) => {
-    const labour = addLabour(values);
+    const labour = addLabour(toLabourInput(values));
     setAddOpen(false);
     clearFilters();
-    setPage(Number.MAX_SAFE_INTEGER); // table clamps this to the last page, where the new labour appears
+    setPage(Number.MAX_SAFE_INTEGER); // table clamps this to the last page, where the new record appears
     toast.success(`${labour.name} added as ${labour.id}`);
   };
 
   const handleEdit = (id, values) => {
-    const changes = { ...values };
-    delete changes.dailyRate; // rate is fixed once set
-    updateLabour(id, changes);
+    updateLabour(id, values); // only name, mobile, village, joining date and status are applied
     setEditing(null);
     toast.success("Labour updated");
   };
@@ -72,7 +82,7 @@ export default function LabourManagement() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="type-page-heading">Labour Management</h1>
-          <p className="mt-1 text-sm text-fg-muted">Manage your workforce, track attendance, rates and salary records.</p>
+          <p className="mt-1 text-sm text-fg-muted">Manage Bigari, Maapvali and Patlavale teams: rates, work and balances.</p>
         </div>
         <Button leftIcon={Plus} onClick={() => setAddOpen(true)} className="hidden self-start sm:inline-flex">
           Add Labour
@@ -81,11 +91,15 @@ export default function LabourManagement() {
 
       <LabourSummaryCards counts={counts} onSelectFilter={handleStatus} />
 
+      <LabourTypeSummary counts={counts} activeType={typeFilter} onSelectType={handleType} />
+
       <LabourFilters
         search={search}
         onSearchChange={handleSearch}
         status={status}
         onStatusChange={handleStatus}
+        type={typeFilter}
+        onTypeChange={handleType}
         counts={counts}
       />
 
@@ -128,10 +142,10 @@ export default function LabourManagement() {
       <ConfirmDialog
         open={Boolean(toggling)}
         variant={deactivating ? "danger" : "primary"}
-        title={deactivating ? "Mark labour as inactive?" : "Mark labour as active?"}
+        title={deactivating ? "Mark as inactive?" : "Mark as active?"}
         message={
           deactivating
-            ? `${toggling?.name} will be marked inactive. All attendance, payments and balance are kept, and you can reactivate them anytime.`
+            ? `${toggling?.name} will be marked inactive. All attendance, work entries, payments and balance are kept, and you can reactivate them anytime.`
             : `${toggling?.name} will be marked active again.`
         }
         confirmText={deactivating ? "Mark inactive" : "Mark active"}

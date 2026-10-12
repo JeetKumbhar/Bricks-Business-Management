@@ -72,16 +72,16 @@ const otherPayments = [
 // Payments to Maapvali workers and Patlavale teams (amounts are illustrative).
 // [recipientId, bayana, [[daysAgo, amount], ...salary payments]]
 const otherTypePayments = [
-  ["L-049", 3000, [[20, 2500], [9, 3000]]],
-  ["L-050", 3000, [[18, 3500]]],
+  ["L-049", 2000, [[20, 1500], [9, 1500]]],
+  ["L-050", 2000, [[18, 3500]]],
   ["L-051", 2500, [[15, 2000], [6, 2500]]],
-  ["L-052", 2000, [[12, 1500]]],
-  ["L-053", 2500, [[25, 2000]]],
+  ["L-052", 3000, [[12, 3500]]], // paid slightly more than earned so far: shows an overpaid (red) balance
+  ["L-053", 2000, [[22, 2500], [9, 3000]]],
   ["L-054", 2000, [[5, 1800]]],
-  ["L-055", 25000, [[40, 12000], [14, 10000]]],
-  ["L-056", 30000, [[35, 15000], [10, 12000]]],
-  ["L-057", 20000, [[30, 8000]]],
-  ["L-058", 20000, [[28, 9000], [7, 8000]]],
+  ["L-055", 8000, [[40, 5000], [14, 4000]]],
+  ["L-056", 10000, [[35, 5000], [10, 3000]]],
+  ["L-057", 6000, [[30, 4000]]],
+  ["L-058", 8000, [[28, 5000], [7, 4000]]],
 ].flatMap(([recipientId, bayana, salaries]) => {
   const labour = [...maapvaliRecords, ...patlavaleRecords].find((l) => l.id === recipientId);
   const recipientType = labour.labourType === "PATLAVALE" ? "TEAM" : "WORKER";

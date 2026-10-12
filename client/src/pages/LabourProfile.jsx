@@ -5,6 +5,7 @@ import { Button, ConfirmDialog, EmptyState, Tabs, useToast } from "../components
 import EditLabourModal from "../features/labours/EditLabourModal";
 import AttendanceTab from "../features/labours/profile/AttendanceTab";
 import ChangeRateModal from "../features/labours/profile/ChangeRateModal";
+import OtherTypeProfile from "../features/labours/profile/OtherTypeProfile";
 import OverviewTab from "../features/labours/profile/OverviewTab";
 import PaymentsTab from "../features/labours/profile/PaymentsTab";
 import ProfileHeader from "../features/labours/profile/ProfileHeader";
@@ -27,7 +28,7 @@ export default function LabourProfile() {
   const navigate = useNavigate();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
-  const { getLabour, getAttendance, getPayments, getRateHistory, updateLabour, isMobileTaken, changeRate } = useLabours();
+  const { getLabour, getAnyLabour, getAttendance, getPayments, getRateHistory, updateLabour, isMobileTaken, changeRate } = useLabours();
 
   const [editOpen, setEditOpen] = useState(false);
   const [toggleOpen, setToggleOpen] = useState(false);
@@ -39,6 +40,10 @@ export default function LabourProfile() {
   const setTab = (next) => setParams(next === "overview" ? {} : { tab: next }, { replace: true });
 
   if (!labour) {
+    // Maapvali workers and Patlavale teams have their own (simpler, for now) profile.
+    const other = getAnyLabour(id);
+    if (other) return <OtherTypeProfile worker={other} />;
+
     return (
       <EmptyState
         icon={Users}

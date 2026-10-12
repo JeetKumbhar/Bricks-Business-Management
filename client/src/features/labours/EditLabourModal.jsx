@@ -1,11 +1,12 @@
 import { Button, Modal } from "../../components/ui";
 import LabourForm from "./LabourForm";
+import { toFormValues } from "./labourRecord";
 
 const FORM_ID = "edit-labour-form";
 
 /**
  * <EditLabourModal labour={editingLabour} onClose isMobileTaken={(mobile) => ...} onSubmit={(id, values) => ...} />
- * Opens whenever `labour` is set. Daily rate is shown read-only.
+ * Opens whenever `labour` is set. Type and rate are shown read-only.
  */
 export default function EditLabourModal({ labour, onClose, isMobileTaken, onSubmit }) {
   return (
@@ -29,18 +30,11 @@ export default function EditLabourModal({ labour, onClose, isMobileTaken, onSubm
       {labour && (
         <LabourForm
           formId={FORM_ID}
+          mode="edit"
           labourId={labour.id}
-          rateLocked
           isMobileTaken={isMobileTaken}
           onSubmit={(values) => onSubmit(labour.id, values)}
-          defaultValues={{
-            name: labour.name,
-            mobile: labour.mobile,
-            village: labour.village,
-            joiningDate: labour.joiningDate,
-            dailyRate: String(labour.dailyRate),
-            status: labour.status,
-          }}
+          defaultValues={toFormValues(labour)}
         />
       )}
     </Modal>

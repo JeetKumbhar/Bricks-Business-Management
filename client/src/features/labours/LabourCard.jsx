@@ -1,42 +1,40 @@
 import { Eye, Pencil, Phone, UserCheck, UserX } from "lucide-react";
 import { Badge, Button, Dropdown } from "../../components/ui";
-import { attendanceDays, calculateBalance } from "../../utils/calculations";
+import { calculateBalance } from "../../utils/calculations";
 import { cn } from "../../utils/cn";
 import { formatCurrency } from "../../utils/formatCurrency";
+import { formatRate } from "../../utils/formatRate";
 import { LABOUR_STATUS, LABOUR_STATUS_META } from "../../utils/labourStatus";
+import LabourAvatar from "./LabourAvatar";
+import { getWorkSummary } from "./labourSummaries";
+import LabourTypeBadge from "./LabourTypeBadge";
 
-const initials = (name) =>
-  name
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-/** Phone layout for one labour (replaces a table row below the md breakpoint). */
+/** Phone layout for one worker or team (replaces a table row below the md breakpoint). */
 export default function LabourCard({ labour, onView, onEdit, onToggleStatus }) {
   const meta = LABOUR_STATUS_META[labour.status];
   const balance = calculateBalance(labour);
   const isActive = labour.status === LABOUR_STATUS.ACTIVE;
+  const work = getWorkSummary(labour);
 
   return (
     <li className="rounded-xl border border-border bg-surface p-4">
       <div className="flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-semibold text-primary">
-          {initials(labour.name)}
-        </span>
+        <LabourAvatar worker={labour} className="h-11 w-11 text-sm" />
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold">{labour.name}</p>
           <p className="type-small">
             {labour.id} - {labour.village}
           </p>
+          <div className="mt-1.5">
+            <LabourTypeBadge type={labour.labourType} />
+          </div>
         </div>
         <Badge variant={meta.variant}>{meta.label}</Badge>
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
         <div>
-          <dt className="type-small">Mobile</dt>
+          <dt className="type-small">{labour.labourType === "PATLAVALE" ? "Contact Mobile" : "Mobile"}</dt>
           <dd>
             <a
               href={`tel:${labour.mobile}`}
@@ -49,16 +47,14 @@ export default function LabourCard({ labour, onView, onEdit, onToggleStatus }) {
           </dd>
         </div>
         <div>
-          <dt className="type-small">Daily Rate</dt>
-          <dd className="font-medium">{formatCurrency(labour.dailyRate)}</dd>
+          <dt className="type-small">Rate</dt>
+          <dd className="font-medium">{formatRate(labour)}</dd>
         </div>
         <div>
-          <dt className="type-small">Present Days</dt>
+          <dt className="type-small">Work</dt>
           <dd className="font-medium">
-            {attendanceDays(labour)}{" "}
-            <span className="type-small font-normal">
-              ({labour.presentDays} full, {labour.halfDays} half)
-            </span>
+            {work.primary}
+            <span className="type-small block font-normal">{work.secondary}</span>
           </dd>
         </div>
         <div>

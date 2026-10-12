@@ -1,10 +1,14 @@
 import { createContext, useCallback, useMemo, useState } from "react";
-import { buildLabourStats, enrichAttendance, groupBy, sortRatesAsc } from "../features/labours/labourStats";
+import { buildWorkerStats, enrichAttendance, groupBy, sortRatesAsc } from "../features/labours/labourStats";
 import { initialAttendance } from "../mock/attendance";
 import { initialLabours } from "../mock/labours";
+import { initialMaapEntries } from "../mock/maapEntries";
 import { initialPayments } from "../mock/payments";
+import { initialProductionEntries } from "../mock/production";
 import { initialRateHistory } from "../mock/rateHistory";
 import { validateMocks } from "../mock/validateMocks";
+import { LABOUR_TYPE_META, LABOUR_TYPES } from "../utils/labourTypes";
+import { labourRecordSchema } from "../validators/labourRecordValidator";
 
 export const LabourContext = createContext(null);
 
@@ -17,6 +21,9 @@ if (import.meta.env.DEV) {
   if (result.ok) console.info("[mock data] all records valid", result.counts);
   else console.error(`[mock data] ${result.errors.length} problem(s) found`, result.errors);
 }
+
+// The only fields the Edit form may change. Type and rate are never changed here.
+const EDITABLE_FIELDS = ["name", "mobile", "village", "joiningDate", "status"];
 
 const idNumber = (id) => Number(id.replace(/\D/g, ""));
 const formatId = (n) => `L-${String(n).padStart(3, "0")}`;
@@ -31,25 +38,38 @@ export function LabourProvider({ children }) {
   const [attendance, setAttendance] = useState(initialAttendance);
   const [payments, setPayments] = useState(initialPayments);
   const [rateChanges, setRateChanges] = useState(initialRateHistory);
+  const [maapEntries] = useState(initialMaapEntries); // setters arrive with the Maapvali phase
+  const [productionEntries] = useState(initialProductionEntries); // setters arrive with the Patlavale phase
 
-  const { attendanceBy, paymentsBy, ratesBy } = useMemo(() => {
+  const { attendanceBy, paymentsBy, ratesBy, maapBy, productionBy } = useMemo(() => {
     const ratesGrouped = groupBy(rateChanges, "labourId");
     return {
       attendanceBy: groupBy(attendance, "labourId"),
+      maapBy: groupBy(maapEntries, "labourId"),
+      productionBy: groupBy(productionEntries, "teamId"),
       paymentsBy: groupBy(payments, "labourId"),
       ratesBy: Object.fromEntries(Object.entries(ratesGrouped).map(([id, list]) => [id, sortRatesAsc(list)])),
     };
-  }, [attendance, payments, rateChanges]);
+  }, [attendance, payments, rateChanges, maapEntries, productionEntries]);
 
-  const labours = useMemo(
+  // Every labour record of every type, with totals calculated from that type's own records.
+  const allLabours = useMemo(
     () =>
-      baseLabours
-        // Existing screens are attendance-based, so they only show BIGARI workers for now.
-        // Maapvali and Patlavale records exist in the data and get their own screens in later phases.
-        .filter((l) => l.labourType === "BIGARI")
-        .map((l) => buildLabourStats(l, attendanceBy[l.id], paymentsBy[l.id], ratesBy[l.id])),
-    [baseLabours, attendanceBy, paymentsBy, ratesBy]
+      baseLabours.map((l) =>
+        buildWorkerStats(l, {
+          attendance: attendanceBy[l.id],
+          maap: maapBy[l.id],
+          production: productionBy[l.id],
+          payments: paymentsBy[l.id],
+          rates: ratesBy[l.id],
+        })
+      ),
+    [baseLabours, attendanceBy, maapBy, productionBy, paymentsBy, ratesBy]
   );
+
+  // Attendance-based screens (Attendance, Payments, Bigari profile) still work with BIGARI workers only.
+  // They are updated for the other types in their own phases.
+  const labours = useMemo(() => allLabours.filter((l) => l.labourType === LABOUR_TYPES.BIGARI), [allLabours]);
 
   // IDs are never reused: highest existing number + 1.
   const nextLabourId = useMemo(
@@ -57,27 +77,36 @@ export function LabourProvider({ children }) {
     [baseLabours]
   );
 
+  /**
+   * values: { labourType, name, mobile, village, status, joiningDate, <the rate field of that type> }
+   * Only the rate field of the chosen type is kept, and the record is checked against its schema.
+   */
   const addLabour = useCallback(
     (values) => {
-      const labour = {
+      const meta = LABOUR_TYPE_META[values.labourType];
+      if (!meta) throw new Error(`Unknown labour type: ${values.labourType}`);
+      const rate = values[meta.rateField];
+
+      const labour = labourRecordSchema.parse({
         id: nextLabourId,
-        labourType: "BIGARI", // other types get their own forms in the next phases
+        labourType: values.labourType,
         name: values.name,
         mobile: values.mobile,
         village: values.village,
         status: values.status,
         joiningDate: values.joiningDate,
-        dailyRate: values.dailyRate,
+        [meta.rateField]: rate,
         photo: null,
-      };
+      });
+
       setBaseLabours((prev) => [...prev, labour]);
       setRateChanges((prev) => [
         ...prev,
         {
           id: `rate-${labour.id}-0`,
           labourId: labour.id,
-          rateType: "DAILY_RATE",
-          rate: values.dailyRate,
+          rateType: meta.rateType,
+          rate,
           effectiveFrom: values.joiningDate,
           reason: "Initial rate",
           changedBy: CURRENT_USER,
@@ -89,8 +118,10 @@ export function LabourProvider({ children }) {
     [nextLabourId]
   );
 
+  /** Updates the editable fields only. History (attendance, payments, entries) is never touched. */
   const updateLabour = useCallback((id, changes) => {
-    setBaseLabours((prev) => prev.map((l) => (l.id === id ? { ...l, ...changes } : l)));
+    const allowed = Object.fromEntries(Object.entries(changes).filter(([key]) => EDITABLE_FIELDS.includes(key)));
+    setBaseLabours((prev) => prev.map((l) => (l.id === id ? { ...l, ...allowed } : l)));
   }, []);
 
   const isMobileTaken = useCallback(
@@ -192,6 +223,9 @@ export function LabourProvider({ children }) {
 
   const getLabour = useCallback((id) => labours.find((l) => l.id === id), [labours]);
 
+  /** Any type (Bigari, Maapvali or Patlavale). getLabour() above returns Bigari only. */
+  const getAnyLabour = useCallback((id) => allLabours.find((l) => l.id === id), [allLabours]);
+
   /** Newest first, each record has units / rate / earned. */
   const getAttendance = useCallback(
     (id) =>
@@ -211,12 +245,14 @@ export function LabourProvider({ children }) {
   const value = useMemo(
     () => ({
       labours,
+      allLabours,
       nextLabourId,
       addLabour,
       updateLabour,
       isMobileTaken,
       changeRate,
       getLabour,
+      getAnyLabour,
       getAttendance,
       getAttendanceByDate,
       saveAttendance,
@@ -227,7 +263,7 @@ export function LabourProvider({ children }) {
       deletePayment,
       getRateHistory,
     }),
-    [labours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, addPayment, updatePayment, deletePayment, getRateHistory]
+    [labours, allLabours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, addPayment, updatePayment, deletePayment, getRateHistory]
   );
 
   return <LabourContext.Provider value={value}>{children}</LabourContext.Provider>;

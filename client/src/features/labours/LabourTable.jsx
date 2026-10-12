@@ -1,27 +1,24 @@
 import { Eye, Pencil, UserCheck, Users, UserX } from "lucide-react";
 import Pagination from "../../components/common/Pagination";
 import { Badge, Button, Card, CardBody, CardHeader, Dropdown, EmptyState, Table } from "../../components/ui";
-import { attendanceDays, calculateBalance } from "../../utils/calculations";
+import { calculateBalance } from "../../utils/calculations";
 import { cn } from "../../utils/cn";
 import { formatCurrency } from "../../utils/formatCurrency";
+import { formatRate } from "../../utils/formatRate";
 import { LABOUR_STATUS, LABOUR_STATUS_META } from "../../utils/labourStatus";
+import LabourAvatar from "./LabourAvatar";
 import LabourCard from "./LabourCard";
+import { getWorkSummary } from "./labourSummaries";
+import LabourTypeBadge from "./LabourTypeBadge";
 
 const PAGE_SIZE = 10;
-
-const initials = (name) =>
-  name
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
 const iconButton = "rounded-lg p-2 text-fg-muted hover:bg-background hover:text-fg";
 
 /**
- * labours: the already-filtered list. This component paginates it.
- * Columns: Labour ID, Name, Mobile, Daily Rate, Status, Present Days, Balance, Actions
+ * labours: the already-filtered list (all three types). This component paginates it.
+ * Columns: Labour ID, Name (+ type), Mobile, Rate (+ unit), Status, Work, Balance, Actions
+ * Phones get one card per worker / team, md+ gets a table.
  */
 export default function LabourTable({
   labours,
@@ -47,9 +44,7 @@ export default function LabourTable({
       header: "Name",
       render: (l) => (
         <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary">
-            {initials(l.name)}
-          </span>
+          <LabourAvatar worker={l} />
           <div>
             <p className="font-medium">{l.name}</p>
             <p className="type-small">{l.village}</p>
@@ -57,8 +52,9 @@ export default function LabourTable({
         </div>
       ),
     },
+    { key: "type", header: "Type", render: (l) => <LabourTypeBadge type={l.labourType} /> },
     { key: "mobile", header: "Mobile" },
-    { key: "dailyRate", header: "Daily Rate", render: (l) => formatCurrency(l.dailyRate) },
+    { key: "rate", header: "Rate", render: (l) => formatRate(l) },
     {
       key: "status",
       header: "Status",
@@ -68,16 +64,17 @@ export default function LabourTable({
       },
     },
     {
-      key: "presentDays",
-      header: "Present Days",
-      render: (l) => (
-        <div>
-          <p className="font-medium">{attendanceDays(l)}</p>
-          <p className="type-small">
-            {l.presentDays} full, {l.halfDays} half
-          </p>
-        </div>
-      ),
+      key: "work",
+      header: "Work",
+      render: (l) => {
+        const work = getWorkSummary(l);
+        return (
+          <div>
+            <p className="font-medium">{work.primary}</p>
+            <p className="type-small">{work.secondary}</p>
+          </div>
+        );
+      },
     },
     {
       key: "balance",
@@ -161,7 +158,7 @@ export default function LabourTable({
           />
         ) : (
           <>
-            {/* Phones: one card per labour */}
+            {/* Phones: one card per worker / team */}
             <ul className="space-y-3 md:hidden">
               {rows.map((l) => (
                 <LabourCard key={l.id} labour={l} onView={onView} onEdit={onEdit} onToggleStatus={onToggleStatus} />
