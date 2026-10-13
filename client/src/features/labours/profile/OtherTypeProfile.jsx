@@ -7,6 +7,7 @@ import { formatDate } from "../../../utils/formatDate";
 import { formatRate } from "../../../utils/formatRate";
 import { LABOUR_STATUS_META } from "../../../utils/labourStatus";
 import { LABOUR_TYPE_META, LABOUR_TYPES } from "../../../utils/labourTypes";
+import MaapWorkHistoryCard from "../../work/maapvali/MaapWorkHistoryCard";
 import LabourAvatar from "../LabourAvatar";
 import LabourTypeBadge from "../LabourTypeBadge";
 
@@ -119,6 +120,8 @@ export default function OtherTypeProfile({ worker }) {
         </Card>
       </div>
 
+      {worker.labourType === LABOUR_TYPES.MAAPVALI && <MaapWorkHistoryCard worker={worker} />}
+
       {isTeam && worker.members?.length > 0 && (
         <Card>
           <CardHeader title="Family Members" subtitle="Reference only" />
@@ -135,9 +138,9 @@ export default function OtherTypeProfile({ worker }) {
         </Card>
       )}
 
-      <p className="type-small">
-        The full {meta.label} profile ({isTeam ? "production ledger" : "maap entries"}, payments and history) is added in an upcoming phase.
-      </p>
+      {isTeam && (
+        <p className="type-small">The full Patlavale profile (production ledger, payments and history) is added in an upcoming phase.</p>
+      )}
     </div>
   );
 }

@@ -7,7 +7,9 @@ import Dashboard from "../pages/Dashboard";
 import LabourManagement from "../pages/LabourManagement";
 import LabourProfile from "../pages/LabourProfile";
 import Attendance from "../pages/Attendance";
+import MaapvaliWork from "../pages/MaapvaliWork";
 import Payments from "../pages/Payments";
+import PatlavaleProduction from "../pages/PatlavaleProduction";
 
 /*
  * Each <PagePlaceholder> is swapped for the real page in its own phase, e.g.
@@ -50,6 +52,8 @@ export default function AppRoutes() {
         <Route path="labours/:id" element={<LabourProfile />} />
         <Route path="attendance" element={<Attendance />} />
         <Route path="payments" element={<Payments />} />
+        <Route path="maapvali-work" element={<MaapvaliWork />} />
+        <Route path="patlavale-production" element={<PatlavaleProduction />} />
         <Route path="salary" element={<PagePlaceholder title="Salary" />} />
         <Route path="trucks" element={<PagePlaceholder title="Trucks" />} />
         <Route path="reports" element={<PagePlaceholder title="Reports" />} />

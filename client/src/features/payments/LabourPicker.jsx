@@ -11,7 +11,7 @@ import { filterLabours } from "../labours/labourSelectors";
  * Searchable labour field that expands inline (works well inside a phone bottom sheet,
  * unlike a native <select> with 48 options).
  */
-export default function LabourPicker({ labours, value, onChange, error, disabled = false }) {
+export default function LabourPicker({ labours, value, onChange, error, disabled = false, label = "Labour", placeholder = "Select labour" }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -35,7 +35,7 @@ export default function LabourPicker({ labours, value, onChange, error, disabled
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-sm font-medium text-fg">
-        Labour<span className="ml-0.5 text-danger">*</span>
+        {label}<span className="ml-0.5 text-danger">*</span>
       </span>
 
       <button
@@ -54,7 +54,7 @@ export default function LabourPicker({ labours, value, onChange, error, disabled
             </span>
           </span>
         ) : (
-          <span className="text-fg-muted">Select labour</span>
+          <span className="text-fg-muted">{placeholder}</span>
         )}
         {!disabled && <ChevronDown className={cn("h-4 w-4 shrink-0 text-fg-muted transition-transform", open && "rotate-180")} aria-hidden="true" />}
       </button>
@@ -69,7 +69,7 @@ export default function LabourPicker({ labours, value, onChange, error, disabled
               autoFocus={typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches}
             />
           </div>
-          <ul role="listbox" aria-label="Labour" className="max-h-64 overflow-y-auto overscroll-contain p-1">
+          <ul role="listbox" aria-label={label} className="max-h-64 overflow-y-auto overscroll-contain p-1">
             {list.length === 0 && <li className="px-3 py-6 text-center text-sm text-fg-muted">No labour found</li>}
             {list.map((l) => (
               <li key={l.id}>

@@ -45,7 +45,13 @@ Every labour record has a `labourType`. It decides how work is recorded and how 
 - **[Decided]** Different Maapvali workers can have different rates per maap.
 - **[Decided]** Do **not** use the Patlavale 1,100-to-1,000 payable conversion for Maapvali.
 - **[Proposed]** Work is recorded as daily maap entries (see data shapes). Each entry stores a snapshot of the rate used, so a later rate change never rewrites old earnings.
-- **[Proposed]** Entries can be corrected; every correction is audit logged with a reason.
+- **[Decided]** The rate on an entry is filled automatically from the worker's profile. Overriding the rate for a single entry would be a business decision that has not been made, so the app does not allow it.
+- **[Decided]** `estimatedBricks = numberOfMaaps x 275` is information only. It is never used in salary calculations.
+- **[Proposed]** Number of maaps is a whole number of 1 or more. Negative, zero and fractional values are rejected (see Open Questions).
+- **[Proposed]** The entry date cannot be in the future or before the worker's joining date. New entries can only be added for active workers.
+- **[Proposed]** A worker can have more than one entry on the same day; each is a separate record and the form warns when the day already has maaps recorded.
+- **[Decided]** Work entries never change the payment ledger. Payments never change work entries.
+- **[Proposed]** Entries can be corrected (date, maaps, note) with a mandatory reason; the saved rate stays as it was. A wrong entry is deleted as a soft delete with a mandatory reason and recorded in the audit log, so history stays traceable.
 
 ## 4. Patlavale (family / team)
 
@@ -244,3 +250,6 @@ The ledger chains: each entry's `previousCarryBricks` equals the earlier entry's
 5. What are the season start / end dates and the season closing procedure?
 6. Can a Maapvali's `ratePerMaap` or a team's `ratePer1000PayableBricks` change during a season? (The data shape allows it through rate history.)
 7. Who may correct or delete maap entries, production entries and payments?
+8. Can the number of maaps be a fraction (for example half a maap)? The prototype accepts whole maaps of 1 or more only.
+9. Can the same Maapvali have more than one work entry on one day, or should there be exactly one daily total per worker?
+10. Is a rate override for a single entry ever allowed? The prototype does not allow it.

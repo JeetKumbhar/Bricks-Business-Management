@@ -3,10 +3,18 @@ import { buildWorkerStats, enrichAttendance, groupBy, sortRatesAsc } from "../fe
 import { initialAttendance } from "../mock/attendance";
 import { initialLabours } from "../mock/labours";
 import { initialMaapEntries } from "../mock/maapEntries";
+import { CURRENT_SEASON_ID } from "../mock/seasons";
 import { initialPayments } from "../mock/payments";
 import { initialProductionEntries } from "../mock/production";
 import { initialRateHistory } from "../mock/rateHistory";
 import { validateMocks } from "../mock/validateMocks";
+import {
+  applyProductionCorrection,
+  applyProductionDelete,
+  createProductionEntry,
+  rechainTeamLedger,
+} from "../features/production/productionEntryOps";
+import { applyMaapCorrection, applyMaapDelete, createMaapEntry } from "../features/work/maapvali/maapEntryOps";
 import { LABOUR_TYPE_META, LABOUR_TYPES } from "../utils/labourTypes";
 import { labourRecordSchema } from "../validators/labourRecordValidator";
 
@@ -38,15 +46,16 @@ export function LabourProvider({ children }) {
   const [attendance, setAttendance] = useState(initialAttendance);
   const [payments, setPayments] = useState(initialPayments);
   const [rateChanges, setRateChanges] = useState(initialRateHistory);
-  const [maapEntries] = useState(initialMaapEntries); // setters arrive with the Maapvali phase
-  const [productionEntries] = useState(initialProductionEntries); // setters arrive with the Patlavale phase
+  const [maapEntries, setMaapEntries] = useState(initialMaapEntries);
+  const [productionEntries, setProductionEntries] = useState(initialProductionEntries);
 
   const { attendanceBy, paymentsBy, ratesBy, maapBy, productionBy } = useMemo(() => {
     const ratesGrouped = groupBy(rateChanges, "labourId");
     return {
       attendanceBy: groupBy(attendance, "labourId"),
-      maapBy: groupBy(maapEntries, "labourId"),
-      productionBy: groupBy(productionEntries, "teamId"),
+      // deleted entries (soft delete) are ignored in every total
+      maapBy: groupBy(maapEntries.filter((e) => !e.isDeleted), "labourId"),
+      productionBy: groupBy(productionEntries.filter((e) => !e.isDeleted), "teamId"),
       paymentsBy: groupBy(payments, "labourId"),
       ratesBy: Object.fromEntries(Object.entries(ratesGrouped).map(([id, list]) => [id, sortRatesAsc(list)])),
     };
@@ -232,6 +241,88 @@ export function LabourProvider({ children }) {
     );
   }, []);
 
+  // ---- Maapvali work entries (they never touch payments) ----
+
+  /** Every maap entry that is not deleted, newest first. */
+  const allMaapEntries = useMemo(
+    () =>
+      maapEntries
+        .filter((e) => !e.isDeleted)
+        .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
+    [maapEntries]
+  );
+
+  /** One worker's entries, newest first. */
+  const getMaapEntries = useCallback(
+    (labourId) => allMaapEntries.filter((e) => e.labourId === labourId),
+    [allMaapEntries]
+  );
+
+  /** input: { labourId, date, numberOfMaaps, note }. The rate comes from the worker's profile. */
+  const addMaapEntry = useCallback(
+    ({ labourId, date, numberOfMaaps, note }) => {
+      const worker = baseLabours.find((l) => l.id === labourId);
+      const entry = createMaapEntry({ worker, date, numberOfMaaps, note, seasonId: CURRENT_SEASON_ID });
+      setMaapEntries((prev) => [...prev, entry]);
+      return entry;
+    },
+    [baseLabours]
+  );
+
+  const updateMaapEntry = useCallback((id, changes, reason) => {
+    setMaapEntries((prev) => prev.map((e) => (e.id === id ? applyMaapCorrection(e, changes, reason) : e)));
+  }, []);
+
+  const deleteMaapEntry = useCallback((id, reason) => {
+    setMaapEntries((prev) => prev.map((e) => (e.id === id ? applyMaapDelete(e, reason) : e)));
+  }, []);
+
+  // ---- Patlavale production ledger (it never touches payments) ----
+
+  /** Every production entry that is not deleted, oldest first (the order the carry-forward chain runs in). */
+  const allProductionEntries = useMemo(
+    () =>
+      productionEntries
+        .filter((e) => !e.isDeleted)
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt ?? "").localeCompare(b.createdAt ?? "")),
+    [productionEntries]
+  );
+
+  /** input: { teamId, date, newPhysicalBricks, note }. The rate comes from the team's profile; derived values are calculated. */
+  const addProductionEntry = useCallback(
+    ({ teamId, date, newPhysicalBricks, note }) => {
+      const team = baseLabours.find((l) => l.id === teamId);
+      const created = createProductionEntry({ team, date, newPhysicalBricks, note, seasonId: CURRENT_SEASON_ID });
+      const next = rechainTeamLedger([...productionEntries, created], teamId);
+      setProductionEntries(next);
+      return next.find((e) => e.id === created.id);
+    },
+    [baseLabours, productionEntries]
+  );
+
+  /** A correction or a deletion re-chains the whole team ledger, because the carry-forward of later days changes. */
+  const updateProductionEntry = useCallback((id, changes, reason) => {
+    setProductionEntries((prev) => {
+      const target = prev.find((e) => e.id === id);
+      if (!target) return prev;
+      return rechainTeamLedger(
+        prev.map((e) => (e.id === id ? applyProductionCorrection(e, changes, reason) : e)),
+        target.teamId
+      );
+    });
+  }, []);
+
+  const deleteProductionEntry = useCallback((id, reason) => {
+    setProductionEntries((prev) => {
+      const target = prev.find((e) => e.id === id);
+      if (!target) return prev;
+      return rechainTeamLedger(
+        prev.map((e) => (e.id === id ? applyProductionDelete(e, reason) : e)),
+        target.teamId
+      );
+    });
+  }, []);
+
   const getLabour = useCallback((id) => labours.find((l) => l.id === id), [labours]);
 
   /** Any type (Bigari, Maapvali or Patlavale). getLabour() above returns Bigari only. */
@@ -272,9 +363,18 @@ export function LabourProvider({ children }) {
       addPayment,
       updatePayment,
       deletePayment,
+      allMaapEntries,
+      getMaapEntries,
+      addMaapEntry,
+      updateMaapEntry,
+      deleteMaapEntry,
+      allProductionEntries,
+      addProductionEntry,
+      updateProductionEntry,
+      deleteProductionEntry,
       getRateHistory,
     }),
-    [labours, allLabours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, addPayment, updatePayment, deletePayment, getRateHistory]
+    [labours, allLabours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, addPayment, updatePayment, deletePayment, allMaapEntries, getMaapEntries, addMaapEntry, updateMaapEntry, deleteMaapEntry, allProductionEntries, addProductionEntry, updateProductionEntry, deleteProductionEntry, getRateHistory]
   );
 
   return <LabourContext.Provider value={value}>{children}</LabourContext.Provider>;
