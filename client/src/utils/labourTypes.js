@@ -15,6 +15,7 @@ export const RATE_TYPES = {
 export const LABOUR_TYPE_META = {
   BIGARI: {
     label: "Bigari",
+    earningsLabel: "Earned from attendance",
     noun: "worker",
     plural: "workers",
     badgeVariant: "info",
@@ -33,6 +34,7 @@ export const LABOUR_TYPE_META = {
   },
   MAAPVALI: {
     label: "Maapvali",
+    earningsLabel: "Earned from maaps",
     noun: "worker",
     plural: "workers",
     badgeVariant: "purple",
@@ -51,6 +53,7 @@ export const LABOUR_TYPE_META = {
   },
   PATLAVALE: {
     label: "Patlavale",
+    earningsLabel: "Earned from production",
     noun: "team",
     plural: "teams",
     badgeVariant: "warning",

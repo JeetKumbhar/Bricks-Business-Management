@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { Button, ConfirmDialog, useToast } from "../components/ui";
+import DeletedPaymentsCard from "../features/payments/DeletedPaymentsCard";
 import PaymentFilters from "../features/payments/PaymentFilters";
 import PaymentFormModal from "../features/payments/PaymentFormModal";
 import PaymentHistory from "../features/payments/PaymentHistory";
+import PaymentRevisionsModal from "../features/payments/PaymentRevisionsModal";
 import { filterPayments, sumAmount, sumSince } from "../features/payments/paymentSelectors";
 import PaymentSummaryTiles from "../features/payments/PaymentSummaryTiles";
 import usePayments from "../features/payments/usePayments";
@@ -11,9 +13,13 @@ import { formatCurrency } from "../utils/formatCurrency";
 import { addDaysISO, formatDate, toISODate } from "../utils/formatDate";
 import { PAYMENT_TYPES } from "../utils/paymentTypes";
 
+/**
+ * Payments for every recipient: Bigari workers, Maapvali workers and Patlavale teams.
+ * A payment is a money transaction only. It never changes attendance, maap entries or production.
+ */
 export default function Payments() {
   const toast = useToast();
-  const { history, labours, addPayment, updatePayment, deletePayment } = usePayments();
+  const { history, deleted, labours, addPayment, updatePayment, deletePayment } = usePayments();
 
   const [search, setSearch] = useState("");
   const [type, setType] = useState("ALL");
@@ -22,6 +28,7 @@ export default function Payments() {
   // null = closed, { payment: null } = add, { payment } = edit
   const [form, setForm] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [viewingChanges, setViewingChanges] = useState(null);
 
   const today = toISODate();
   const searched = useMemo(() => filterPayments(history, { search }), [history, search]);
@@ -56,7 +63,7 @@ export default function Payments() {
   };
 
   const handleSubmit = (values) => {
-    const labourName = labours.find((l) => l.id === values.labourId)?.name ?? values.labourId;
+    const recipientName = labours.find((l) => l.id === values.labourId)?.name ?? values.labourId;
 
     if (form.payment) {
       updatePayment(
@@ -74,14 +81,14 @@ export default function Payments() {
         note: values.note,
       });
       setPage(1);
-      toast.success(`${formatCurrency(values.amount)} recorded for ${labourName}`);
+      toast.success(`${formatCurrency(values.amount)} recorded for ${recipientName}`);
     }
     setForm(null);
   };
 
   const handleDelete = (reason) => {
     deletePayment(deleting.id, reason);
-    toast.success("Payment deleted");
+    toast.success("Payment deleted. It stays on record.");
     setDeleting(null);
   };
 
@@ -90,7 +97,9 @@ export default function Payments() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="type-page-heading">Payments</h1>
-          <p className="mt-1 text-sm text-fg-muted">Booking advances, salary payments and other money given to labour.</p>
+          <p className="mt-1 text-sm text-fg-muted">
+            Bayana, salary payments and other money given to workers and Patlavale teams.
+          </p>
         </div>
         <Button leftIcon={Plus} onClick={() => setForm({ payment: null })} className="hidden self-start sm:inline-flex">
           Add Payment
@@ -107,9 +116,12 @@ export default function Payments() {
         onPageChange={setPage}
         onEdit={(payment) => setForm({ payment })}
         onDelete={setDeleting}
+        onViewChanges={setViewingChanges}
         hasFilters={hasFilters}
         onClearFilters={clearFilters}
       />
+
+      <DeletedPaymentsCard deleted={deleted} />
 
       {/* Phones: floating add button above the bottom nav */}
       <button
@@ -123,13 +135,15 @@ export default function Payments() {
 
       <PaymentFormModal open={Boolean(form)} payment={form?.payment ?? null} labours={labours} onClose={() => setForm(null)} onSubmit={handleSubmit} />
 
+      <PaymentRevisionsModal payment={viewingChanges} onClose={() => setViewingChanges(null)} />
+
       <ConfirmDialog
         open={Boolean(deleting)}
         variant="danger"
         title="Delete payment?"
         message={
           deleting
-            ? `${formatCurrency(deleting.amount)} paid to ${deleting.labourName} on ${formatDate(deleting.date)} will be removed and the balance recalculated. This is recorded in the audit log.`
+            ? `${formatCurrency(deleting.amount)} paid to ${deleting.labourName} on ${formatDate(deleting.date)} will be removed from the balance. The record stays under "Deleted payments" and in the audit log.`
             : ""
         }
         confirmText="Delete"

@@ -1,3 +1,6 @@
+import { LABOUR_TYPE_META } from "../../utils/labourTypes";
+
+/** search: recipient name, ID, labour type (e.g. "patlavale") or note. type: "ALL" or a payment type. */
 export const filterPayments = (payments, { search = "", type = "ALL" }) => {
   const q = search.trim().toLowerCase();
   return payments.filter((p) => {
@@ -6,6 +9,7 @@ export const filterPayments = (payments, { search = "", type = "ALL" }) => {
     return (
       p.labourName.toLowerCase().includes(q) ||
       p.labourId.toLowerCase().includes(q) ||
+      (LABOUR_TYPE_META[p.labourType]?.label ?? "").toLowerCase().includes(q) ||
       (p.note ?? "").toLowerCase().includes(q)
     );
   });

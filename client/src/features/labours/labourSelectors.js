@@ -1,6 +1,6 @@
 import { toISODate } from "../../utils/formatDate";
 import { LABOUR_STATUS } from "../../utils/labourStatus";
-import { LABOUR_TYPES } from "../../utils/labourTypes";
+import { LABOUR_TYPE_META, LABOUR_TYPES } from "../../utils/labourTypes";
 
 export const isJoinedThisMonth = (joiningDate, today = new Date()) =>
   Boolean(joiningDate) && joiningDate.slice(0, 7) === toISODate(today).slice(0, 7);
@@ -19,7 +19,7 @@ export const getLabourCounts = (labours) => ({
 /**
  * status: "ALL" | "ACTIVE" | "INACTIVE" | "NEW" (joined this month)
  * type:   "ALL" | "BIGARI" | "MAAPVALI" | "PATLAVALE"
- * search: matches name (team name for Patlavale), mobile number or labour ID
+ * search: matches name (team name for Patlavale), mobile number, labour ID or labour type
  */
 export const filterLabours = (labours, { search = "", status = "ALL", type = "ALL" } = {}) => {
   const q = search.trim().toLowerCase();
@@ -34,6 +34,11 @@ export const filterLabours = (labours, { search = "", status = "ALL", type = "AL
     }
 
     if (!q) return true;
-    return l.name.toLowerCase().includes(q) || l.mobile.includes(q) || l.id.toLowerCase().includes(q);
+    return (
+      l.name.toLowerCase().includes(q) ||
+      l.mobile.includes(q) ||
+      l.id.toLowerCase().includes(q) ||
+      LABOUR_TYPE_META[l.labourType].label.toLowerCase().includes(q) // typing "patlavale" or "maapvali" finds that type
+    );
   });
 };

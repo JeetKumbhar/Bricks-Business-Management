@@ -3,7 +3,7 @@ import { PAYMENT_TYPES } from "../utils/paymentTypes";
 import { toISODate } from "../utils/formatDate";
 
 const base = z.object({
-  labourId: z.string().min(1, "Select a labour"),
+  labourId: z.string().min(1, "Select a worker or team"), // the recipient: a Bigari, a Maapvali or a Patlavale team
   type: z.enum([PAYMENT_TYPES.BOOKING_ADVANCE, PAYMENT_TYPES.SALARY_PAYMENT, PAYMENT_TYPES.OTHER]),
   amount: z
     .string()

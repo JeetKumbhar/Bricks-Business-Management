@@ -6,12 +6,22 @@ import { cn } from "../../utils/cn";
 import { formatCurrency } from "../../utils/formatCurrency";
 import { LABOUR_STATUS } from "../../utils/labourStatus";
 import { filterLabours } from "../labours/labourSelectors";
+import LabourTypeBadge from "../labours/LabourTypeBadge";
 
 /**
  * Searchable labour field that expands inline (works well inside a phone bottom sheet,
  * unlike a native <select> with 48 options).
  */
-export default function LabourPicker({ labours, value, onChange, error, disabled = false, label = "Labour", placeholder = "Select labour" }) {
+export default function LabourPicker({
+  labours,
+  value,
+  onChange,
+  error,
+  disabled = false,
+  label = "Labour",
+  placeholder = "Select labour",
+  showType = false, // show Bigari / Maapvali / Patlavale (Team) beside each name
+}) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -49,8 +59,9 @@ export default function LabourPicker({ labours, value, onChange, error, disabled
         {selected ? (
           <span className="min-w-0">
             <span className="block truncate font-medium">{selected.name}</span>
-            <span className="block text-xs text-fg-muted">
+            <span className="mt-0.5 flex items-center gap-2 text-xs text-fg-muted">
               {selected.id} - {selected.village}
+              {showType && <LabourTypeBadge type={selected.labourType} />}
             </span>
           </span>
         ) : (
@@ -92,8 +103,9 @@ export default function LabourPicker({ labours, value, onChange, error, disabled
                         </Badge>
                       )}
                     </span>
-                    <span className="block text-xs text-fg-muted">
+                    <span className="mt-0.5 flex items-center gap-2 text-xs text-fg-muted">
                       {l.id} - {l.village}
+                      {showType && <LabourTypeBadge type={l.labourType} />}
                     </span>
                   </span>
                   <span className={cn("shrink-0 text-xs font-semibold", l.balance < 0 && "text-danger")}>

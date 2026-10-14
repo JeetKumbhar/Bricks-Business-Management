@@ -16,7 +16,7 @@ import {
 } from "../features/production/productionEntryOps";
 import { applyMaapCorrection, applyMaapDelete, createMaapEntry } from "../features/work/maapvali/maapEntryOps";
 import { LABOUR_TYPE_META, LABOUR_TYPES } from "../utils/labourTypes";
-import { labourRecordSchema } from "../validators/labourRecordValidator";
+import { labourRecordSchema, paymentRecordSchema } from "../validators/labourRecordValidator";
 
 export const LabourContext = createContext(null);
 
@@ -193,42 +193,67 @@ export function LabourProvider({ children }) {
     [baseLabours]
   );
 
-  /** Payments that are not deleted and belong to a labour the current screens show, newest first. */
-  const visibleLabourIds = useMemo(() => new Set(labours.map((l) => l.id)), [labours]);
-  const allPayments = useMemo(
-    () =>
-      payments
-        .filter((p) => !p.isDeleted && visibleLabourIds.has(p.labourId))
-        .sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
-    [payments, visibleLabourIds]
-  );
+  const byNewest = (a, b) => b.date.localeCompare(a.date) || (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
 
+  /** Every payment that is not deleted, for all labour types (workers and Patlavale teams), newest first. */
+  const allPayments = useMemo(() => payments.filter((p) => !p.isDeleted).sort(byNewest), [payments]);
+
+  /** Deleted payments stay on record (soft delete) and are ignored in every balance. */
+  const deletedPayments = useMemo(() => payments.filter((p) => p.isDeleted).sort(byNewest), [payments]);
+
+  /**
+   * A payment is linked to its recipient: a worker (Bigari or Maapvali) or a Patlavale team.
+   * It is a money transaction only: it never touches attendance, maap entries or production.
+   */
   const addPayment = useCallback(
     ({ labourId, type, amount, date, note }) => {
-    const recipient = baseLabours.find((l) => l.id === labourId);
-    const payment = {
-      id: `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      recipientType: recipient?.labourType === "PATLAVALE" ? "TEAM" : "WORKER",
-      recipientId: labourId,
-      labourId, // legacy alias of recipientId (existing screens still read it)
-      type,
-      amount,
-      date,
-      method: "CASH", // mostly cash (docs/BUSINESS_RULES.md)
-      note: note ?? "",
-      isDeleted: false,
-      createdAt: new Date().toISOString(),
-    };
-    setPayments((prev) => [...prev, payment]);
-    return payment;
+      const recipient = baseLabours.find((l) => l.id === labourId);
+      if (!recipient) throw new Error(`Unknown payment recipient: ${labourId}`);
+
+      const payment = {
+        id: `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        recipientType: recipient.labourType === LABOUR_TYPES.PATLAVALE ? "TEAM" : "WORKER",
+        recipientId: labourId,
+        labourId, // legacy alias of recipientId (some screens still read it)
+        type,
+        amount,
+        date,
+        method: "CASH", // mostly cash (docs/BUSINESS_RULES.md)
+        note: note ?? "",
+        isDeleted: false,
+        createdAt: new Date().toISOString(),
+      };
+      paymentRecordSchema.parse(payment); // throws if the record is not valid
+      setPayments((prev) => [...prev, payment]);
+      return payment;
     },
     [baseLabours]
   );
 
-  /** Correct a payment (type / amount / date / note). The reason is mandatory and will go to the audit log. */
+  /**
+   * Correct a payment (type / amount / date / note only; the recipient never changes).
+   * The old values are kept in `revisions`, so a correction never silently erases what was there before.
+   */
   const updatePayment = useCallback((id, changes, reason) => {
+    const allowed = Object.fromEntries(
+      Object.entries(changes).filter(([key]) => ["type", "amount", "date", "note"].includes(key))
+    );
+    const now = new Date().toISOString();
     setPayments((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...changes, editedReason: reason, updatedAt: new Date().toISOString() } : p))
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              ...allowed,
+              editedReason: reason,
+              updatedAt: now,
+              revisions: [
+                ...(p.revisions ?? []),
+                { changedAt: now, changedBy: CURRENT_USER, reason, before: { type: p.type, amount: p.amount, date: p.date, note: p.note } },
+              ],
+            }
+          : p
+      )
     );
   }, []);
 
@@ -360,6 +385,7 @@ export function LabourProvider({ children }) {
       saveAttendance,
       getPayments,
       allPayments,
+      deletedPayments,
       addPayment,
       updatePayment,
       deletePayment,
@@ -374,7 +400,7 @@ export function LabourProvider({ children }) {
       deleteProductionEntry,
       getRateHistory,
     }),
-    [labours, allLabours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, addPayment, updatePayment, deletePayment, allMaapEntries, getMaapEntries, addMaapEntry, updateMaapEntry, deleteMaapEntry, allProductionEntries, addProductionEntry, updateProductionEntry, deleteProductionEntry, getRateHistory]
+    [labours, allLabours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, deletedPayments, addPayment, updatePayment, deletePayment, allMaapEntries, getMaapEntries, addMaapEntry, updateMaapEntry, deleteMaapEntry, allProductionEntries, addProductionEntry, updateProductionEntry, deleteProductionEntry, getRateHistory]
   );
 
   return <LabourContext.Provider value={value}>{children}</LabourContext.Provider>;

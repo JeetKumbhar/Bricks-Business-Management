@@ -7,8 +7,12 @@ import { formatDate } from "../../../utils/formatDate";
 import { formatRate } from "../../../utils/formatRate";
 import { LABOUR_STATUS_META } from "../../../utils/labourStatus";
 import { LABOUR_TYPE_META, LABOUR_TYPES } from "../../../utils/labourTypes";
+import AccountSummaryCard from "../../accounts/AccountSummaryCard";
+import TeamProductionCard from "../../production/TeamProductionCard";
 import MaapWorkHistoryCard from "../../work/maapvali/MaapWorkHistoryCard";
 import LabourAvatar from "../LabourAvatar";
+import useLabours from "../useLabours";
+import PaymentsTab from "./PaymentsTab";
 import LabourTypeBadge from "../LabourTypeBadge";
 
 function Row({ label, children }) {
@@ -34,6 +38,7 @@ function Figure({ label, value, danger }) {
  * Their full profiles (maap entries / production ledger) are built in later phases.
  */
 export default function OtherTypeProfile({ worker }) {
+  const { getPayments } = useLabours();
   const meta = LABOUR_TYPE_META[worker.labourType];
   const status = LABOUR_STATUS_META[worker.status];
   const isTeam = worker.labourType === LABOUR_TYPES.PATLAVALE;
@@ -110,17 +115,17 @@ export default function OtherTypeProfile({ worker }) {
                 <Figure label="Work days" value={worker.workDays} />
               </div>
             )}
-            <div className="grid grid-cols-3 gap-2">
-              <Figure label="Earned" value={formatCurrency(worker.earned)} />
-              <Figure label="Received" value={formatCurrency(worker.totalReceived)} />
-              <Figure label="Balance" value={formatCurrency(worker.balance)} danger={worker.balance < 0} />
-            </div>
             <p className="type-small">Prototype calculation. Final salary figures are calculated by the server.</p>
           </CardBody>
         </Card>
       </div>
 
+      <AccountSummaryCard worker={worker} />
+
       {worker.labourType === LABOUR_TYPES.MAAPVALI && <MaapWorkHistoryCard worker={worker} />}
+      {isTeam && <TeamProductionCard team={worker} />}
+
+      <PaymentsTab labour={worker} payments={getPayments(worker.id)} />
 
       {isTeam && worker.members?.length > 0 && (
         <Card>
@@ -139,7 +144,7 @@ export default function OtherTypeProfile({ worker }) {
       )}
 
       {isTeam && (
-        <p className="type-small">The full Patlavale profile (production ledger, payments and history) is added in an upcoming phase.</p>
+        <p className="type-small">More team history is added in an upcoming phase.</p>
       )}
     </div>
   );

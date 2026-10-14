@@ -1,12 +1,10 @@
 // Pure functions that turn raw records into the numbers shown in the UI.
-// Rules: docs/BUSINESS_RULES.md
-//   earned  = sum of (attendance units x the rate in force on that day)
-//   balance = earned - total received      (negative = overpaid, shown in red)
+// The money maths (earnings, received, balance) lives in utils/accountCalculations.js; this file prepares
+// each type's records and adds the display fields. Rules: docs/BUSINESS_RULES.md
+import { buildAccount, summarizeTransactions } from "../../utils/accountCalculations";
 import { ATTENDANCE_STATUS, ATTENDANCE_UNITS } from "../../utils/attendanceStatus";
 import { toISODate } from "../../utils/formatDate";
 import { LABOUR_TYPES } from "../../utils/labourTypes";
-import { PAYMENT_TYPES } from "../../utils/paymentTypes";
-import { summarizeProduction } from "../../utils/productionCalculations";
 
 export const groupBy = (items, key) =>
   items.reduce((groups, item) => {
@@ -34,18 +32,11 @@ export const enrichAttendance = (records = [], ratesAsc = []) =>
     return { ...record, units, rate, earned: units * rate };
   });
 
+/** Bigari: earnings come from attendance and rate history. */
 export const buildLabourStats = (labour, records = [], payments = [], ratesAsc = [], today = toISODate()) => {
   const attendance = enrichAttendance(records, ratesAsc);
   const countOf = (status) => attendance.filter((r) => r.status === status).length;
-
-  const livePayments = payments.filter((p) => !p.isDeleted);
-  const sumOf = (type) => livePayments.filter((p) => p.type === type).reduce((total, p) => total + p.amount, 0);
-
-  const bookingAdvance = sumOf(PAYMENT_TYPES.BOOKING_ADVANCE);
-  const salaryPayments = sumOf(PAYMENT_TYPES.SALARY_PAYMENT);
-  const otherPayments = sumOf(PAYMENT_TYPES.OTHER);
-  const totalReceived = bookingAdvance + salaryPayments + otherPayments;
-  const earned = attendance.reduce((total, r) => total + r.earned, 0);
+  const account = buildAccount({ labourType: LABOUR_TYPES.BIGARI, attendance, payments });
 
   return {
     ...labour,
@@ -53,64 +44,24 @@ export const buildLabourStats = (labour, records = [], payments = [], ratesAsc =
     presentDays: countOf(ATTENDANCE_STATUS.PRESENT),
     halfDays: countOf(ATTENDANCE_STATUS.HALF_DAY),
     absentDays: countOf(ATTENDANCE_STATUS.ABSENT),
-    workingUnits: attendance.reduce((total, r) => total + r.units, 0),
-    earned,
-    bookingAdvance,
-    salaryPayments,
-    otherPayments,
-    totalReceived,
-    balance: earned - totalReceived,
+    ...account,
   };
 };
 
-// ---------------------------------------------------------------------------
-// Maapvali and Patlavale (PROTOTYPE calculations; final financial calculations belong to the backend)
-//   Maapvali  earned = sum of maap entry earnings (numberOfMaaps x ratePerMaap)
-//   Patlavale earned = sum of production entry newEarnings (payable bricks / 1000 x team rate)
-//   balance   = earned - total received
-// Attendance is not used for either type. Until the client confirms how Bayana and "Other" payments are
-// treated, every payment type counts as received (see docs/BUSINESS_RULES.md, open questions).
-// ---------------------------------------------------------------------------
+/** Kept for older imports: totals of the payment transactions. */
+export const summarizePayments = summarizeTransactions;
 
-/** Totals of the payments that are not deleted. */
-export const summarizePayments = (payments = []) => {
-  const live = payments.filter((p) => !p.isDeleted);
-  const sumOf = (type) => live.filter((p) => p.type === type).reduce((total, p) => total + p.amount, 0);
-  const bookingAdvance = sumOf(PAYMENT_TYPES.BOOKING_ADVANCE);
-  const salaryPayments = sumOf(PAYMENT_TYPES.SALARY_PAYMENT);
-  const otherPayments = sumOf(PAYMENT_TYPES.OTHER);
-  return { bookingAdvance, salaryPayments, otherPayments, totalReceived: bookingAdvance + salaryPayments + otherPayments };
-};
+/** Maapvali: earnings come from maap work entries. */
+export const buildMaapvaliStats = (worker, entries = [], payments = []) => ({
+  ...worker,
+  ...buildAccount({ labourType: LABOUR_TYPES.MAAPVALI, maapEntries: entries, payments }),
+});
 
-export const buildMaapvaliStats = (worker, entries = [], payments = []) => {
-  const earned = entries.reduce((total, e) => total + e.earnings, 0);
-  const paid = summarizePayments(payments);
-  return {
-    ...worker,
-    totalMaaps: entries.reduce((total, e) => total + e.numberOfMaaps, 0),
-    workDays: entries.length,
-    earned,
-    ...paid,
-    balance: earned - paid.totalReceived,
-  };
-};
-
-export const buildPatlavaleStats = (team, entries = [], payments = []) => {
-  const ledger = [...entries].sort((a, b) => a.date.localeCompare(b.date));
-  const production = summarizeProduction(ledger);
-  const paid = summarizePayments(payments);
-  return {
-    ...team,
-    // Physical, payable and carry-forward bricks are kept as separate values.
-    totalPhysicalBricks: production.totalPhysicalBricks,
-    totalPayableBricks: production.totalPayableBricks,
-    carryForwardBricks: production.carryForwardBricks,
-    productionDays: ledger.length,
-    earned: production.totalEarnings,
-    ...paid,
-    balance: production.totalEarnings - paid.totalReceived,
-  };
-};
+/** Patlavale team: earnings come from payable production units. */
+export const buildPatlavaleStats = (team, entries = [], payments = []) => ({
+  ...team,
+  ...buildAccount({ labourType: LABOUR_TYPES.PATLAVALE, productionEntries: entries, payments }),
+});
 
 /** One entry point for any labour record. data: { attendance, maap, production, payments, rates } */
 export const buildWorkerStats = (worker, data = {}) => {

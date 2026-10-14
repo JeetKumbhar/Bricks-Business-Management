@@ -106,4 +106,61 @@ const otherTypePayments = [
 // Every payment names its recipient. Bigari payments are to a WORKER.
 const withRecipient = (p) => ({ recipientType: "WORKER", recipientId: p.labourId, ...p });
 
-export const initialPayments = [...[...generatedPayments, ...otherPayments].map(withRecipient), ...otherTypePayments];
+// More examples so every kind of record is represented:
+//  - "Other" payments for a Maapvali worker and a Patlavale team (a note is required for Other)
+//  - one corrected payment: it keeps its revision history (what it was before, why it changed)
+//  - one deleted payment: it stays on record with its reason, and is ignored in every balance
+const otherExamples = [
+  ["L-051", 4, 300, "Medical help"],
+  ["L-057", 8, 500, "Diesel for tractor"],
+].map(([recipientId, ago, amount, note], i) => ({
+  id: `pay-${recipientId}-other${i + 1}`,
+  labourId: recipientId, // legacy alias, same as recipientId
+  recipientType: recipientId === "L-057" ? "TEAM" : "WORKER",
+  recipientId,
+  date: daysAgo(ago),
+  type: "OTHER",
+  amount,
+  method: "CASH",
+  note,
+  isDeleted: false,
+}));
+
+const deletedExample = {
+  id: "pay-L-056-deleted",
+  labourId: "L-056",
+  recipientType: "TEAM",
+  recipientId: "L-056",
+  date: daysAgo(12),
+  type: "SALARY_PAYMENT",
+  amount: 4000,
+  method: "CASH",
+  note: "Entered twice",
+  isDeleted: true,
+  deletedReason: "Duplicate entry",
+  deletedAt: new Date(Date.now() - 11 * 24 * 3600 * 1000).toISOString(),
+};
+
+const withHistory = (p) =>
+  p.id === "pay-L-050-s1"
+    ? {
+        ...p, // amount is 3,500 now; it was typed as 3,000 first
+        editedReason: "Amount was typed wrongly",
+        updatedAt: new Date(Date.now() - 16 * 24 * 3600 * 1000).toISOString(),
+        revisions: [
+          {
+            changedAt: new Date(Date.now() - 16 * 24 * 3600 * 1000).toISOString(),
+            changedBy: "Ramesh Patel",
+            reason: "Amount was typed wrongly",
+            before: { type: p.type, amount: 3000, date: p.date, note: p.note },
+          },
+        ],
+      }
+    : p;
+
+export const initialPayments = [
+  ...[...generatedPayments, ...otherPayments].map(withRecipient),
+  ...otherTypePayments,
+  ...otherExamples,
+  deletedExample,
+].map(withHistory);

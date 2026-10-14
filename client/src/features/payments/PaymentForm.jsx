@@ -3,9 +3,11 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle, IndianRupee } from "lucide-react";
 import { DatePicker, Input, Textarea } from "../../components/ui";
+import { countsAsReceived } from "../../utils/accountCalculations";
 import { cn } from "../../utils/cn";
 import { formatCurrency } from "../../utils/formatCurrency";
 import { toISODate } from "../../utils/formatDate";
+import { LABOUR_TYPE_META, LABOUR_TYPES } from "../../utils/labourTypes";
 import { PAYMENT_TYPES } from "../../utils/paymentTypes";
 import { makePaymentSchema } from "../../validators/paymentValidator";
 import LabourPicker from "./LabourPicker";
@@ -13,10 +15,22 @@ import PaymentTypeSelect from "./PaymentTypeSelect";
 
 const QUICK_AMOUNTS = [500, 1000, 2000, 5000];
 
+function Line({ label, value, danger, strong }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className={cn(strong ? "font-medium text-fg" : "text-fg-muted")}>{label}</span>
+      <span className={cn("font-semibold", danger && "text-danger")}>{value}</span>
+    </div>
+  );
+}
+
 /**
- * Fields: Labour, Payment Type, Amount, Date, Note  (+ "Reason for correction" when editing).
+ * Fields: Recipient (a worker of any type or a Patlavale team), Payment Type, Amount, Date, Note
+ * (+ "Reason for correction" when editing).
  * Submit from a modal footer with <Button type="submit" form={formId}>.
- * In edit mode the labour is locked: a payment given to the wrong labour is deleted and re-entered.
+ * In edit mode the recipient is locked: a payment given to the wrong recipient is deleted and re-entered.
+ *
+ * `labours` holds every labour record, each with its calculated account (earned, totalReceived, balance).
  */
 export default function PaymentForm({ formId, payment, labours, onSubmit }) {
   const isEdit = Boolean(payment);
@@ -44,13 +58,20 @@ export default function PaymentForm({ formId, payment, labours, onSubmit }) {
   });
 
   const [labourId, type, amountText] = watch(["labourId", "type", "amount"]);
-  const labour = labours.find((l) => l.id === labourId);
+  const recipient = labours.find((l) => l.id === labourId);
   const amount = Number(amountText) > 0 ? Number(amountText) : 0;
+  const meta = recipient ? LABOUR_TYPE_META[recipient.labourType] : null;
+  const isTeam = recipient?.labourType === LABOUR_TYPES.PATLAVALE;
 
-  // When editing, this payment is already part of the labour's balance, so add it back first.
-  const balanceBefore = labour ? labour.balance + (isEdit ? payment.amount : 0) : 0;
-  const balanceAfter = balanceBefore - amount;
-  const overpaid = Boolean(labour) && amount > 0 && balanceAfter < 0;
+  // Account figures come from the account calculation layer (recipient.earned / totalReceived / balance).
+  // When editing, this payment is already in the account, so take it out first.
+  const receivedBefore = recipient
+    ? recipient.totalReceived - (isEdit && countsAsReceived(payment.type) ? payment.amount : 0)
+    : 0;
+  const balanceBefore = recipient ? recipient.earned - receivedBefore : 0;
+  const receivedAfter = receivedBefore + (countsAsReceived(type) ? amount : 0);
+  const balanceAfter = recipient ? recipient.earned - receivedAfter : 0;
+  const overpaid = Boolean(recipient) && amount > 0 && balanceAfter < 0;
 
   return (
     <form id={formId} onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -59,33 +80,46 @@ export default function PaymentForm({ formId, payment, labours, onSubmit }) {
         control={control}
         render={({ field }) => (
           <LabourPicker
+            label="Recipient"
+            placeholder="Select worker or team"
             labours={labours}
             value={field.value}
             onChange={field.onChange}
             error={errors.labourId?.message}
             disabled={isEdit}
+            showType
           />
         )}
       />
 
-      {labour && (
-        <div className={cn("rounded-lg px-4 py-3 text-sm", overpaid ? "bg-danger-soft" : "bg-background")}>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-fg-muted">{isEdit ? "Balance before this payment" : "Current balance"}</span>
-            <span className={cn("font-semibold", balanceBefore < 0 && "text-danger")}>{formatCurrency(balanceBefore)}</span>
+      {recipient && (
+        <div className={cn("space-y-1.5 rounded-lg px-4 py-3 text-sm", overpaid ? "bg-danger-soft" : "bg-background")}>
+          <p className="text-xs font-medium text-fg-muted">
+            {isTeam ? "Team account" : "Account"} - {meta.label}
+          </p>
+          <Line label={meta.earningsLabel} value={formatCurrency(recipient.earned)} />
+          <Line
+            label={isEdit ? "Total received (without this payment)" : "Total received"}
+            value={formatCurrency(receivedBefore)}
+          />
+          <div className="border-t border-border pt-1.5">
+            <Line
+              label={isEdit ? "Balance before this payment" : "Current balance"}
+              value={formatCurrency(balanceBefore)}
+              danger={balanceBefore < 0}
+              strong
+            />
           </div>
           {amount > 0 && (
-            <div className="mt-1 flex items-center justify-between gap-3">
-              <span className="text-fg-muted">After this payment</span>
-              <span className={cn("font-semibold", balanceAfter < 0 && "text-danger")}>{formatCurrency(balanceAfter)}</span>
-            </div>
+            <Line label="Balance after this payment" value={formatCurrency(balanceAfter)} danger={balanceAfter < 0} strong />
           )}
           {overpaid && (
-            <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-danger">
+            <p className="flex items-start gap-1.5 pt-1 text-xs font-medium text-danger">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              This pays more than the labour has earned. The balance will show in red.
+              This pays more than has been earned. The balance will show in red.
             </p>
           )}
+          <p className="type-small pt-1">Payments change the balance only, never work or production records.</p>
         </div>
       )}
 
@@ -138,7 +172,7 @@ export default function PaymentForm({ formId, payment, labours, onSubmit }) {
           required
           rows={2}
           placeholder="Why is this payment being changed?"
-          hint="Saved in the audit log."
+          hint="Saved in the audit log. The previous values are kept."
           error={errors.reason?.message}
           {...register("reason")}
         />
