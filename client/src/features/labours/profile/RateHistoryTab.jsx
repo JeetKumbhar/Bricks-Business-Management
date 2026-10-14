@@ -3,12 +3,17 @@ import { Badge, Button, Card, CardBody, CardHeader } from "../../../components/u
 import { cn } from "../../../utils/cn";
 import { formatCurrency } from "../../../utils/formatCurrency";
 import { addDaysISO, formatDate, toISODate } from "../../../utils/formatDate";
+import { getRate } from "../../../utils/formatRate";
+import { LABOUR_TYPE_META } from "../../../utils/labourTypes";
 
 /**
- * history: newest first.
- * Timeline of every daily-rate change. Past attendance keeps the rate it was earned at.
+ * Rate history for any type (daily rate, rate per maap, or team rate per 1,000 payable bricks).
+ * history: newest first. Past work keeps the rate it was recorded at.
+ * Pass onChangeRate to show the "Change Rate" button. It is only offered for Bigari for now:
+ * rate changes for Maapvali and Patlavale are still to be confirmed with the client.
  */
 export default function RateHistoryTab({ labour, history, onChangeRate }) {
+  const meta = LABOUR_TYPE_META[labour.labourType];
   const today = toISODate();
   const current = history.find((entry) => entry.effectiveFrom <= today) ?? history[history.length - 1];
 
@@ -17,16 +22,20 @@ export default function RateHistoryTab({ labour, history, onChangeRate }) {
       <Card>
         <CardBody className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs text-fg-muted">Current daily rate</p>
+            <p className="text-xs text-fg-muted">Current {meta.rateLabel.toLowerCase()}</p>
             <p className="text-3xl font-bold">
-              {formatCurrency(labour.dailyRate)} <span className="text-base font-normal text-fg-muted">/ day</span>
+              {formatCurrency(getRate(labour))} <span className="text-base font-normal text-fg-muted">{meta.rateUnitShort}</span>
             </p>
             {current && <p className="type-small mt-1">Since {formatDate(current.effectiveFrom)}</p>}
           </div>
-          {/* TODO (auth phase): show only for the Owner role. */}
-          <Button leftIcon={TrendingUp} onClick={onChangeRate} className="w-full sm:w-auto">
-            Change Rate
-          </Button>
+          {onChangeRate ? (
+            // TODO (auth phase): show only for the Owner role.
+            <Button leftIcon={TrendingUp} onClick={onChangeRate} className="w-full sm:w-auto">
+              Change Rate
+            </Button>
+          ) : (
+            <p className="type-small max-w-xs">Rate changes for this type are not available yet. New entries use the rate shown here.</p>
+          )}
         </CardBody>
       </Card>
 
@@ -52,7 +61,7 @@ export default function RateHistoryTab({ labour, history, onChangeRate }) {
                   <div className="rounded-lg border border-border p-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-base font-semibold">
-                        {formatCurrency(entry.rate)} <span className="text-sm font-normal text-fg-muted">/ day</span>
+                        {formatCurrency(entry.rate)} <span className="text-sm font-normal text-fg-muted">{meta.rateUnitShort}</span>
                       </p>
                       {isCurrent && (
                         <Badge variant="success" size="sm">

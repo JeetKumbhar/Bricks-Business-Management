@@ -4,36 +4,33 @@ import { cn } from "../../../utils/cn";
 import { formatCurrency } from "../../../utils/formatCurrency";
 import { formatDate } from "../../../utils/formatDate";
 import { LABOUR_STATUS, LABOUR_STATUS_META } from "../../../utils/labourStatus";
+import { LABOUR_TYPES } from "../../../utils/labourTypes";
+import LabourAvatar from "../LabourAvatar";
+import LabourTypeBadge from "../LabourTypeBadge";
 
-const initials = (name) =>
-  name
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-/** Top card: who this is, current balance, and quick actions (call / edit / status). */
+/** Top card for a Bigari, a Maapvali or a Patlavale team: who it is, current balance, and quick actions. */
 export default function ProfileHeader({ labour, onEdit, onToggleStatus }) {
   const meta = LABOUR_STATUS_META[labour.status];
   const isActive = labour.status === LABOUR_STATUS.ACTIVE;
   const overpaid = labour.balance < 0;
+  const isTeam = labour.labourType === LABOUR_TYPES.PATLAVALE;
 
   return (
     <Card>
       <CardBody className="space-y-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3 sm:gap-4">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-soft text-lg font-semibold text-primary sm:h-16 sm:w-16 sm:text-xl">
-              {initials(labour.name)}
-            </span>
+            <LabourAvatar worker={labour} className="h-14 w-14 text-lg sm:h-16 sm:w-16 sm:text-xl" />
             <div className="min-w-0">
               <h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">{labour.name}</h1>
               <p className="type-small">
                 {labour.id} - {labour.village}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <Badge variant={meta.variant}>{meta.label}</Badge>
+                <LabourTypeBadge type={labour.labourType} />
+                <Badge variant={meta.variant} size="sm">
+                  {meta.label}
+                </Badge>
                 <span className="type-small">Joined {formatDate(labour.joiningDate)}</span>
               </div>
             </div>
@@ -45,7 +42,7 @@ export default function ProfileHeader({ labour, onEdit, onToggleStatus }) {
               overpaid ? "bg-danger-soft" : "bg-background"
             )}
           >
-            <span className="text-sm text-fg-muted">{overpaid ? "Overpaid" : "Balance salary"}</span>
+            <span className="text-sm text-fg-muted">{overpaid ? "Overpaid" : isTeam ? "Team balance" : "Balance salary"}</span>
             <span className={cn("text-xl font-bold", overpaid && "text-danger")}>{formatCurrency(labour.balance)}</span>
           </div>
         </div>
