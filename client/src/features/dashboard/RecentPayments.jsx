@@ -3,6 +3,7 @@ import { Badge, Card, CardBody, CardHeader, Table } from "../../components/ui";
 import { formatCurrency } from "../../utils/formatCurrency";
 import { formatDate } from "../../utils/formatDate";
 import { PAYMENT_TYPE_META } from "../../utils/paymentTypes";
+import LabourTypeBadge from "../labours/LabourTypeBadge";
 import ViewAllButton from "./ViewAllButton";
 
 const columns = [
@@ -13,7 +14,10 @@ const columns = [
     render: (p) => (
       <div>
         <p className="font-medium">{p.labourName}</p>
-        <p className="type-small">{p.labourId}</p>
+        <p className="mt-0.5 flex items-center gap-2 type-small">
+          {p.labourId}
+          {p.labourType && <LabourTypeBadge type={p.labourType} />}
+        </p>
       </div>
     ),
   },
@@ -28,7 +32,7 @@ const columns = [
   { key: "amount", header: "Amount", align: "right", className: "font-semibold", render: (p) => formatCurrency(p.amount) },
 ];
 
-/** Phones: simple list rows. md and up: table. */
+/** Latest payments to any recipient (workers and Patlavale teams). Phones: list rows. md and up: table. */
 export default function RecentPayments({ payments, className }) {
   return (
     <Card className={className}>
@@ -41,8 +45,9 @@ export default function RecentPayments({ payments, className }) {
               <li key={p.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{p.labourName}</p>
-                  <p className="type-small">
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 type-small">
                     {formatDate(p.date)} - {p.labourId}
+                    {p.labourType && <LabourTypeBadge type={p.labourType} />}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">

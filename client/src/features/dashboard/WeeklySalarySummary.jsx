@@ -1,4 +1,4 @@
-import { AlertTriangle, Banknote } from "lucide-react";
+import { Banknote } from "lucide-react";
 import { Card, CardBody, CardHeader } from "../../components/ui";
 import { percentage } from "../../utils/calculations";
 import { formatCurrency } from "../../utils/formatCurrency";
@@ -14,24 +14,27 @@ function Row({ label, value, valueClass }) {
 }
 
 /**
- * Rolling last-7-days view (salary has no fixed week - see BUSINESS_RULES).
- * paid = every payment type, because all of them count as "received".
+ * Last 7 days across all three types: what was earned (from each type's own records) and what was paid.
+ * Rolling window, not a fixed salary week (see docs/BUSINESS_RULES.md).
  */
-export default function WeeklySalarySummary({ earned, paid, pendingBalance, overpaidLabours = 0, className }) {
-  const paidPercent = Math.min(100, percentage(paid, earned));
+export default function WeeklySalarySummary({ earnings, className }) {
+  const paidPercent = Math.min(100, percentage(earnings.paid, earnings.total));
 
   return (
     <Card className={className}>
       <CardHeader
-        title="Weekly Salary Summary"
-        subtitle="Last 7 days"
+        title="Last 7 Days"
+        subtitle="Earned and paid, all types"
         icon={Banknote}
-        action={<ViewAllButton to="/salary" label="View" />}
+        action={<ViewAllButton to="/payments" label="View" />}
       />
       <CardBody>
         <div className="divide-y divide-border">
-          <Row label="Earned" value={formatCurrency(earned)} />
-          <Row label="Paid" value={formatCurrency(paid)} valueClass="text-success" />
+          <Row label="Bigari (attendance)" value={formatCurrency(earnings.bigari)} />
+          <Row label="Maapvali (maaps)" value={formatCurrency(earnings.maapvali)} />
+          <Row label="Patlavale (payable bricks)" value={formatCurrency(earnings.patlavale)} />
+          <Row label="Total earned" value={formatCurrency(earnings.total)} />
+          <Row label="Paid" value={formatCurrency(earnings.paid)} valueClass="text-success" />
         </div>
 
         <div className="mt-2">
@@ -44,24 +47,12 @@ export default function WeeklySalarySummary({ earned, paid, pendingBalance, over
             aria-valuenow={paidPercent}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label="Share of weekly earnings already paid"
+            aria-label="Share of the last 7 days' earnings already paid"
             className="h-2 overflow-hidden rounded-full bg-background"
           >
             <div className="h-full rounded-full bg-success" style={{ width: `${paidPercent}%` }} />
           </div>
         </div>
-
-        <div className="mt-4 rounded-lg bg-primary-soft p-3">
-          <p className="text-xs text-fg-muted">Total pending balance</p>
-          <p className="mt-0.5 text-xl font-bold text-primary">{formatCurrency(pendingBalance)}</p>
-        </div>
-
-        {overpaidLabours > 0 && (
-          <p className="mt-3 flex items-center gap-2 rounded-lg bg-danger-soft px-3 py-2 text-sm font-medium text-red-600">
-            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-            {overpaidLabours} {overpaidLabours === 1 ? "labour has" : "labours have"} a negative balance
-          </p>
-        )}
       </CardBody>
     </Card>
   );

@@ -1,4 +1,4 @@
-import { CalendarCheck, Clock, Truck, UserPlus, Wallet } from "lucide-react";
+import { Boxes, CalendarCheck, Clock, Factory, Truck, UserPlus, Wallet } from "lucide-react";
 import { Card, CardBody, CardHeader, EmptyState } from "../../components/ui";
 import { formatRelativeTime } from "../../utils/formatDate";
 import { cn } from "../../utils/cn";
@@ -8,6 +8,8 @@ const activityMeta = {
   payment: { icon: Wallet, style: "bg-primary-soft text-primary" },
   truck: { icon: Truck, style: "bg-danger-soft text-danger" },
   labour: { icon: UserPlus, style: "bg-violet-100 text-violet-600" },
+  maap: { icon: Boxes, style: "bg-violet-100 text-violet-600" },
+  production: { icon: Factory, style: "bg-warning-soft text-amber-700" },
 };
 
 export default function RecentActivities({ activities, className }) {

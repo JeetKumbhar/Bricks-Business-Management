@@ -1,27 +1,54 @@
 import { useNavigate } from "react-router-dom";
-import { Banknote, Clock, Truck, UserCheck, Users, UserX, Wallet, Ban } from "lucide-react";
+import { Banknote, Boxes, UserCheck, Users, Wallet } from "lucide-react";
 import { StatCard } from "../../components/ui";
-import { formatCurrency } from "../../utils/formatCurrency";
+import { formatCurrency, formatNumber } from "../../utils/formatCurrency";
 
-/** The 8 summary cards at the top of the Dashboard. */
-export default function DashboardStats({ summary, weeklyPaymentsTotal }) {
+/**
+ * Summary cards. Attendance cards say "Bigari": attendance is not recorded for Maapvali or Patlavale,
+ * so those types are never counted in them. Patlavale production has its own section below.
+ */
+export default function DashboardStats({ workers, attendanceToday, maap, money }) {
   const navigate = useNavigate();
-  const { trucks } = summary;
+  const anyMarked = attendanceToday.marked > 0;
 
   const cards = [
-    { title: "Total Labour", value: summary.totalLabour, icon: Users, color: "blue", action: "View All", to: "/labours" },
-    { title: "Present Today", value: summary.presentToday, icon: UserCheck, color: "green", action: "View All", to: "/attendance" },
-    { title: "Half Day", value: summary.halfDayToday, icon: Clock, color: "yellow", action: "View All", to: "/attendance" },
-    { title: "Absent", value: summary.absentToday, icon: UserX, color: "red", action: "View All", to: "/attendance" },
-    { title: "Working Trucks", value: `${trucks.working} / ${trucks.total}`, icon: Truck, color: "purple", action: "View All", to: "/trucks" },
-    { title: "Stopped Trucks", value: trucks.stopped, icon: Ban, color: "red", variant: "soft", action: "View All", to: "/trucks" },
+    { title: "Bigari Active", value: workers.bigariActive, icon: Users, color: "blue", action: "View Labour", to: "/labours" },
+    {
+      title: "Bigari Present Today",
+      // nothing marked yet: show a dash instead of a misleading 0
+      value: anyMarked ? attendanceToday.present : "-",
+      icon: UserCheck,
+      color: "green",
+      action: anyMarked ? "View Attendance" : "Mark Attendance",
+      to: "/attendance",
+    },
+    { title: "Maapvali Active", value: workers.maapvaliActive, icon: Boxes, color: "purple", action: "View Work", to: "/maapvali-work" },
+    { title: "Maaps Today", value: formatNumber(maap.todayMaaps), icon: Boxes, color: "purple", variant: "soft", action: "Add Work", to: "/maapvali-work" },
     // Money values are long, so these two take the full row on phones.
-    { title: "Pending Salary", value: formatCurrency(summary.pendingSalary), icon: Banknote, color: "blue", variant: "soft", action: "View Salary", to: "/salary", wide: true },
-    { title: "Weekly Payments", value: formatCurrency(weeklyPaymentsTotal), icon: Wallet, color: "green", variant: "soft", action: "View Payments", to: "/payments", wide: true },
+    {
+      title: "Total Outstanding Balance",
+      value: formatCurrency(money.outstanding),
+      icon: Banknote,
+      color: "red",
+      variant: "soft",
+      action: "View Payments",
+      to: "/payments",
+      wide: true,
+    },
+    {
+      title: "Paid Last 7 Days",
+      value: formatCurrency(money.paidLast7),
+      icon: Wallet,
+      color: "green",
+      variant: "soft",
+      action: "View Payments",
+      to: "/payments",
+      wide: true,
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
       {cards.map((card) => (
         <StatCard
           key={card.title}

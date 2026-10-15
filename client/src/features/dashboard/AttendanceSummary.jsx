@@ -11,15 +11,19 @@ const series = [
   { key: "absent", label: "Absent", color: chartColors.absent },
 ];
 
-/** Last 7 days of attendance as a line chart. */
+/**
+ * Last 7 days of attendance as a line chart. BIGARI workers only: Maapvali and Patlavale have no attendance.
+ * A day with nothing marked is left blank (null values) instead of showing misleading zeros.
+ */
 export default function AttendanceSummary({ data, className }) {
+  const hasGaps = data.some((d) => d.present === null);
   const chartData = data.map((d) => ({ ...d, day: formatShortWeekday(d.date), fullDate: formatDate(d.date) }));
 
   return (
     <Card className={className}>
       <CardHeader
-        title="Attendance Summary"
-        subtitle="Last 7 days"
+        title="Bigari Attendance"
+        subtitle="Last 7 days - Bigari workers only"
         icon={CalendarDays}
         action={<ViewAllButton to="/attendance" />}
       />
@@ -63,6 +67,7 @@ export default function AttendanceSummary({ data, className }) {
             </LineChart>
           </ResponsiveContainer>
         </div>
+        {hasGaps && <p className="type-small mt-2">Days with no attendance marked are left blank.</p>}
       </CardBody>
     </Card>
   );
