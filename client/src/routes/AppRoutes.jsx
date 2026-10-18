@@ -9,6 +9,10 @@ import LabourProfile from "../pages/LabourProfile";
 import Attendance from "../pages/Attendance";
 import MaapvaliWork from "../pages/MaapvaliWork";
 import Payments from "../pages/Payments";
+import Reports from "../pages/Reports";
+import Salary from "../pages/Salary";
+import Settings from "../pages/Settings";
+import Trucks from "../pages/Trucks";
 import PatlavaleProduction from "../pages/PatlavaleProduction";
 
 /*
@@ -54,10 +58,10 @@ export default function AppRoutes() {
         <Route path="payments" element={<Payments />} />
         <Route path="maapvali-work" element={<MaapvaliWork />} />
         <Route path="patlavale-production" element={<PatlavaleProduction />} />
-        <Route path="salary" element={<PagePlaceholder title="Salary" />} />
-        <Route path="trucks" element={<PagePlaceholder title="Trucks" />} />
-        <Route path="reports" element={<PagePlaceholder title="Reports" />} />
-        <Route path="settings" element={<PagePlaceholder title="Settings" />} />
+        <Route path="salary" element={<Salary />} />
+        <Route path="trucks" element={<Trucks />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

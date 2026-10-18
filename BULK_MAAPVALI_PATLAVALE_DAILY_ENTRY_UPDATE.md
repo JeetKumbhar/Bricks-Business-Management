@@ -4,12 +4,8 @@
 
 Update the existing BrickPro frontend so the owner can enter the evening's work for **all Maapvali workers on one page** and **all Patlavale teams on one page**, instead of repeatedly opening an individual “Add Work Entry” / “Add Production Entry” form.
 
-The experience should feel similar to the existing **Attendance** page:
-- Show the full relevant worker/team list together.
-- Let the owner enter that day's quantity inline for each row.
-- Choose the work date once for the whole list.
-- Save all entered rows in one action.
-- Keep the existing Attendance flow as the UI/UX reference.
+The expe
+
 - Continue using mock data and frontend state for this phase. **Do not start backend work yet.**
 
 This document is a development specification for the existing project, not a request to rebuild it from scratch.

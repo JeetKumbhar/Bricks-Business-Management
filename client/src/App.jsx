@@ -1,6 +1,7 @@
 import { BrowserRouter } from "react-router-dom";
 import { ToastProvider } from "./components/ui";
 import { LabourProvider } from "./context/LabourContext";
+import { TruckProvider } from "./context/TruckContext";
 import AppRoutes from "./routes/AppRoutes";
 
 export default function App() {
@@ -8,7 +9,9 @@ export default function App() {
     <BrowserRouter>
       <ToastProvider>
         <LabourProvider>
-          <AppRoutes />
+          <TruckProvider>
+            <AppRoutes />
+          </TruckProvider>
         </LabourProvider>
       </ToastProvider>
     </BrowserRouter>
