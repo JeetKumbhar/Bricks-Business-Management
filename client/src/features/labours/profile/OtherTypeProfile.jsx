@@ -107,7 +107,7 @@ export default function OtherTypeProfile({ worker }) {
               <div className="grid grid-cols-3 gap-2">
                 <Figure label="Physical bricks" value={formatNumber(worker.totalPhysicalBricks)} />
                 <Figure label="Payable bricks" value={formatNumber(worker.totalPayableBricks)} />
-                <Figure label="Carry-forward" value={formatNumber(worker.carryForwardBricks)} />
+                <Figure label="Total maaps" value={formatNumber(worker.totalMaaps)} />
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">

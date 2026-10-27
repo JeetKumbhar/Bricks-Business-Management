@@ -6,8 +6,8 @@ import ViewAllButton from "./ViewAllButton";
 
 /**
  * Season production of all Patlavale teams.
- * Physical bricks (made) and payable bricks (paid for) are shown as separate numbers, with carry-forward
- * on its own. Payments never change any of them.
+ * Maaps, physical bricks (made) and payable bricks (paid for) are shown as separate numbers.
+ * Payments never change any of them.
  */
 export default function PatlavaleProductionCard({ production, className }) {
   return (
@@ -22,15 +22,15 @@ export default function PatlavaleProductionCard({ production, className }) {
         <ProductionSummary summary={production.season} scope={`All ${production.teams} teams`} />
         <div className="grid gap-2 rounded-lg bg-background p-3 text-sm sm:grid-cols-3">
           <p>
+            <span className="font-semibold">Maaps</span> = what the teams recorded ({formatNumber(production.season.totalMaaps)}). 4 maaps =
+            1,100 bricks made.
+          </p>
+          <p>
             <span className="font-semibold">Physical</span> = bricks made ({formatNumber(production.season.totalPhysicalBricks)}).
           </p>
           <p>
-            <span className="font-semibold">Payable</span> = bricks the teams are paid for: 1,000 for every full 1,100 made (
+            <span className="font-semibold">Payable</span> = bricks the teams are paid for: 250 for every maap (
             {formatNumber(production.season.totalPayableBricks)}).
-          </p>
-          <p>
-            <span className="font-semibold">Carry-forward</span> = made but not yet in a full 1,100 (
-            {formatNumber(production.season.carryForwardBricks)}).
           </p>
         </div>
       </CardBody>

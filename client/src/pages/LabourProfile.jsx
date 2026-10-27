@@ -116,7 +116,7 @@ export default function LabourProfile() {
                   summary={{
                     totalPhysicalBricks: labour.totalPhysicalBricks,
                     totalPayableBricks: labour.totalPayableBricks,
-                    carryForwardBricks: labour.carryForwardBricks,
+                    totalMaaps: labour.totalMaaps,
                     totalEarnings: labour.earned,
                   }}
                 />

@@ -2,14 +2,14 @@ import { useCallback, useMemo } from "react";
 import useLabours from "../../labours/useLabours";
 import { LABOUR_STATUS } from "../../../utils/labourStatus";
 import { LABOUR_TYPES } from "../../../utils/labourTypes";
-import { summarizeMaapWork } from "../../../utils/workCalculations";
+import { deriveMaapEntry } from "../../../utils/dailyWorkCalculations";
 
 /**
  * Maapvali workers + their work entries (with the worker name added), and the add / correct / delete actions.
- * Backed by LabourProvider (in-memory mock) for now.
+ * Daily work is saved with saveMaapDay (one record per worker and date). Backed by LabourProvider (in-memory mock) for now.
  */
 export default function useMaapvaliWork() {
-  const { allLabours, allMaapEntries, addMaapEntry, updateMaapEntry, deleteMaapEntry } = useLabours();
+  const { allLabours, allMaapEntries, updateMaapEntry, deleteMaapEntry, saveMaapDay } = useLabours();
 
   const maapvali = useMemo(() => allLabours.filter((l) => l.labourType === LABOUR_TYPES.MAAPVALI), [allLabours]);
   // New work can only be recorded for active workers.
@@ -22,11 +22,8 @@ export default function useMaapvaliWork() {
       .map((e) => ({ ...e, workerName: byId[e.labourId].name }));
   }, [maapvali, allMaapEntries]);
 
-  /** What the worker already has on a date (entries are separate records; a day can have more than one). */
-  const getDayTotal = useCallback(
-    (labourId, date) => summarizeMaapWork(entries.filter((e) => e.labourId === labourId && e.date === date)),
-    [entries]
-  );
+  /** "What would this entry earn?" for the correction form. candidate: { numberOfMaaps, ratePerFourMaaps }. */
+  const previewEntry = useCallback((candidate) => deriveMaapEntry(candidate), []);
 
-  return { maapvali, activeWorkers, entries, getDayTotal, addMaapEntry, updateMaapEntry, deleteMaapEntry };
+  return { maapvali, activeWorkers, entries, previewEntry, saveMaapDay, updateMaapEntry, deleteMaapEntry };
 }

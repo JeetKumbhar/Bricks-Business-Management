@@ -4,7 +4,7 @@ import { toISODate } from "../utils/formatDate";
 
 /**
  * Maapvali work entry form.
- * - maaps: whole number of 1 or more (see validateMaapCount for the rule and its status)
+ * - maaps: whole number of 0 or more (see validateMaapCount for the rule and its status)
  * - date: not in the future (the "not before joining date" check needs the worker, so the form does it)
  * - reason: required when correcting an existing entry
  * There is no rate field: the rate always comes from the worker's profile. A different rate for one entry would be

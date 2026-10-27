@@ -1,10 +1,9 @@
-// Patlavale production ledger (one entry per production record, oldest first per team). Shape:
-// { id, teamId, seasonId, date, newPhysicalBricks, previousCarryBricks, physicalAvailable,
-//   completedGroups, newPayableBricks, carryForwardBricks, ratePer1000PayableBricks, newEarnings, note }
-// Derived fields are stored here as a snapshot (like an audit ledger). Whether the backend stores them or
-// recalculates them from the raw entries is decided when the backend is designed.
-// Payments never reset these totals.
-import { calculateProductionEntry } from "../utils/productionCalculations";
+// Patlavale production ledger (one entry per team per day, oldest first per team). Shape:
+// { id, teamId, seasonId, date, newMaaps (typed that day), newPhysicalBricks (maaps x 275), newPayableBricks (maaps x 250),
+//   ratePer1000PayableBricks (= rate per 4 maaps), newEarnings (= maaps / 4 x rate), note }
+// 4 maaps = 1,100 physical = 1,000 payable bricks. Every maap is paid; there is no carry-forward.
+// Payments never reset these totals. Today is left empty so the daily entry page can be demonstrated.
+import { deriveProductionEntries } from "../utils/dailyWorkCalculations";
 import { toISODate } from "../utils/formatDate";
 import { patlavaleRecords } from "./labours";
 import { CURRENT_SEASON_ID } from "./seasons";
@@ -17,24 +16,17 @@ const daysAgo = (n) => {
 
 const ENTRY_DAYS = 25;
 
-export const initialProductionEntries = patlavaleRecords.flatMap((team, t) => {
-  let carry = 0;
-  return Array.from({ length: ENTRY_DAYS }, (_, i) => {
-    const newPhysicalBricks = 800 + ((t * 7 + i * 11) % 13) * 100; // 800..2,000
-    const calculated = calculateProductionEntry({
-      newPhysicalBricks,
-      previousCarryBricks: carry,
-      ratePer1000PayableBricks: team.ratePer1000PayableBricks,
-    });
-    carry = calculated.carryForwardBricks;
-
-    return {
+export const initialProductionEntries = patlavaleRecords.flatMap((team, t) =>
+  deriveProductionEntries(
+    Array.from({ length: ENTRY_DAYS }, (_, i) => ({
       id: `prod-${team.id}-${i + 1}`,
       teamId: team.id,
       seasonId: CURRENT_SEASON_ID,
       date: daysAgo(ENTRY_DAYS - i),
-      ...calculated,
+      newMaaps: 3 + ((t * 7 + i * 11) % 5), // 3..7 maaps a day (about 800-2,000 bricks)
+      ratePer1000PayableBricks: team.ratePer1000PayableBricks,
       note: "",
-    };
-  });
-});
+      isDeleted: false,
+    }))
+  )
+);

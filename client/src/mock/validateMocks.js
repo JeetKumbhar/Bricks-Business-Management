@@ -74,16 +74,17 @@ export function validateMocks() {
     else if (r.rateType !== LABOUR_TYPE_META[type].rateType) errors.push(`rate ${r.id}: rateType does not match ${type}`);
   });
 
-  // Production ledger must chain: each entry's previous carry = the earlier entry's carry-forward.
-  const byTeam = {};
-  initialProductionEntries.forEach((e) => (byTeam[e.teamId] ||= []).push(e));
-  Object.entries(byTeam).forEach(([teamId, entries]) => {
-    entries.forEach((entry, i) => {
-      const expectedCarry = i === 0 ? 0 : entries[i - 1].carryForwardBricks;
-      if (entry.previousCarryBricks !== expectedCarry) errors.push(`production ${entry.id}: previous carry breaks the chain for ${teamId}`);
-      if (i > 0 && entry.date <= entries[i - 1].date) errors.push(`production ${entry.id}: dates must increase`);
+  // One entry per worker / team per date (saving a day again updates it; it never adds a second record).
+  const oneADay = (entries, ownerKey, label) => {
+    const seen = new Set();
+    entries.forEach((e) => {
+      const key = `${e[ownerKey]}|${e.date}`;
+      if (seen.has(key)) errors.push(`${label} ${e.id}: two entries on one date for ${e[ownerKey]}`);
+      seen.add(key);
     });
-  });
+  };
+  oneADay(initialMaapEntries, "labourId", "maap entry");
+  oneADay(initialProductionEntries, "teamId", "production");
 
   const counts = {
     BIGARI: initialLabours.filter((l) => l.labourType === "BIGARI").length,

@@ -27,7 +27,6 @@ export const buildPeriodAccounts = ({
 }) => {
   const inRange = (r) => r.date >= start && r.date <= end;
   const maapBy = groupBy(maapEntries.filter(inRange), "labourId");
-  const productionAllBy = groupBy(productionEntries, "teamId"); // for the carry-forward at the end of the range
   const paymentsBy = groupBy(payments.filter(inRange), "labourId");
 
   const rows = labours.map((l) => {
@@ -41,14 +40,12 @@ export const buildPeriodAccounts = ({
       earned = sum(entries, (e) => e.earnings);
       work = { maaps: sum(entries, (e) => e.numberOfMaaps), workDays: entries.length };
     } else if (l.labourType === LABOUR_TYPES.PATLAVALE) {
-      const all = productionAllBy[l.id] ?? [];
-      const entries = all.filter(inRange);
-      const lastUpToEnd = [...all].filter((e) => e.date <= end).pop();
+      const entries = productionEntries.filter((e) => e.teamId === l.id && inRange(e));
       earned = sum(entries, (e) => e.newEarnings);
       work = {
+        maaps: sum(entries, (e) => e.newMaaps),
         physicalBricks: sum(entries, (e) => e.newPhysicalBricks),
         payableBricks: sum(entries, (e) => e.newPayableBricks),
-        carryForwardBricks: lastUpToEnd?.carryForwardBricks ?? 0, // carry-forward as it stood at the end of the range
         entries: entries.length,
       };
     } else {

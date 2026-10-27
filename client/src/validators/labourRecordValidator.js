@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LABOUR_TYPES, PHYSICAL_BRICKS_PER_GROUP, PAYABLE_BRICKS_PER_GROUP, RATE_TYPES } from "../utils/labourTypes";
+import { BRICKS_PER_MAAP, LABOUR_TYPES, PAYABLE_BRICKS_PER_MAAP, RATE_TYPES } from "../utils/labourTypes";
 import { PAYMENT_TYPES } from "../utils/paymentTypes";
 
 // Schemas for the stored record shapes (docs/BUSINESS_RULES.md, "Data shapes").
@@ -26,7 +26,7 @@ const bigari = z
   .strict();
 
 const maapvali = z
-  .object({ ...common, labourType: z.literal(LABOUR_TYPES.MAAPVALI), ratePerMaap: z.number().positive() })
+  .object({ ...common, labourType: z.literal(LABOUR_TYPES.MAAPVALI), ratePerFourMaaps: z.number().positive() })
   .strict();
 
 // A Patlavale record is the family / team. `name` is the team name.
@@ -52,7 +52,7 @@ export const attendanceRecordSchema = z.object({
 export const rateHistoryEntrySchema = z.object({
   id: z.string().min(1),
   labourId: recordId,
-  rateType: z.enum([RATE_TYPES.DAILY_RATE, RATE_TYPES.RATE_PER_MAAP, RATE_TYPES.RATE_PER_1000_PAYABLE_BRICKS]),
+  rateType: z.enum([RATE_TYPES.DAILY_RATE, RATE_TYPES.RATE_PER_FOUR_MAAPS, RATE_TYPES.RATE_PER_1000_PAYABLE_BRICKS]),
   rate: z.number().positive(),
   effectiveFrom: isoDate,
   reason: z.string().min(1),
@@ -83,55 +83,43 @@ export const paymentRecordSchema = z
     }
   });
 
-// Maapvali daily maap work entry. ratePerMaap is a snapshot of the rate on that day.
+// Maapvali daily maap work entry. ratePerFourMaaps is a snapshot of the rate on that day.
+// numberOfMaaps is what was entered that day (0 is allowed: an explicit zero). Every maap is paid: earnings = maaps / 4 x rate.
 export const maapEntrySchema = z
   .object({
     id: z.string().min(1),
     labourId: recordId,
     seasonId: z.string().min(1),
     date: isoDate,
-    numberOfMaaps: z.number().int().positive(),
-    ratePerMaap: z.number().positive(),
+    numberOfMaaps: whole,
+    ratePerFourMaaps: z.number().positive(),
     earnings: z.number().min(0),
     note: z.string(),
   })
   .superRefine((e, ctx) => {
-    if (Math.abs(e.earnings - e.numberOfMaaps * e.ratePerMaap) > 0.005) {
-      ctx.addIssue({ code: "custom", path: ["earnings"], message: "earnings must equal numberOfMaaps x ratePerMaap" });
+    if (Math.abs(e.earnings - (e.numberOfMaaps / 4) * e.ratePerFourMaaps) > 0.005) {
+      ctx.addIssue({ code: "custom", path: ["earnings"], message: "earnings must equal numberOfMaaps / 4 x ratePerFourMaaps" });
     }
   });
 
-// Patlavale production ledger entry. Physical, payable and carry-forward bricks are separate values.
+// Patlavale production entry. Maaps typed, physical bricks (x275), payable bricks (x250) and earnings are separate values.
 export const productionEntrySchema = z
   .object({
     id: z.string().min(1),
     teamId: recordId,
     seasonId: z.string().min(1),
     date: isoDate,
+    newMaaps: whole,
     newPhysicalBricks: whole,
-    previousCarryBricks: whole,
-    physicalAvailable: whole,
-    completedGroups: whole,
     newPayableBricks: whole,
-    carryForwardBricks: whole,
     ratePer1000PayableBricks: z.number().positive(),
     newEarnings: z.number().min(0),
     note: z.string(),
   })
   .superRefine((e, ctx) => {
     const problem = (path, message) => ctx.addIssue({ code: "custom", path: [path], message });
-    const groups = Math.floor(e.physicalAvailable / PHYSICAL_BRICKS_PER_GROUP);
-
-    if (e.physicalAvailable !== e.newPhysicalBricks + e.previousCarryBricks) {
-      problem("physicalAvailable", "must equal newPhysicalBricks + previousCarryBricks");
-    }
-    if (e.completedGroups !== groups) problem("completedGroups", `must be floor(physicalAvailable / ${PHYSICAL_BRICKS_PER_GROUP})`);
-    if (e.newPayableBricks !== e.completedGroups * PAYABLE_BRICKS_PER_GROUP) {
-      problem("newPayableBricks", `must be completedGroups x ${PAYABLE_BRICKS_PER_GROUP}`);
-    }
-    if (e.carryForwardBricks !== e.physicalAvailable - e.completedGroups * PHYSICAL_BRICKS_PER_GROUP) {
-      problem("carryForwardBricks", "must be physicalAvailable - completedGroups x 1100");
-    }
+    if (e.newPhysicalBricks !== e.newMaaps * BRICKS_PER_MAAP) problem("newPhysicalBricks", `must be newMaaps x ${BRICKS_PER_MAAP}`);
+    if (e.newPayableBricks !== e.newMaaps * PAYABLE_BRICKS_PER_MAAP) problem("newPayableBricks", `must be newMaaps x ${PAYABLE_BRICKS_PER_MAAP}`);
     if (Math.abs(e.newEarnings - (e.newPayableBricks / 1000) * e.ratePer1000PayableBricks) > 0.005) {
       problem("newEarnings", "must be (newPayableBricks / 1000) x ratePer1000PayableBricks");
     }

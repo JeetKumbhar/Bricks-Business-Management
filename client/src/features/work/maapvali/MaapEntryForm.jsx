@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DatePicker, Input, Textarea } from "../../../components/ui";
@@ -10,16 +10,16 @@ import LabourPicker from "../../payments/LabourPicker";
 import EarningsPreview from "./EarningsPreview";
 
 /**
- * Fields: Date, Maapvali worker, Number of maaps, Rate per maap (read-only), Earnings preview, Note.
- * Submit from a modal footer with <Button type="submit" form={formId} value="close" | "another">.
+ * Correction form for ONE saved entry (new work is entered on the daily list). Fields: Date, worker (locked),
+ * Number of maaps, Rate per 4 maaps (read-only), Earnings preview, Note, Reason.
+ * Submit from a modal footer with <Button type="submit" form={formId}>.
  *
  * The rate is filled from the worker's profile and cannot be changed here. In edit mode the worker is locked and
  * a reason for the correction is required.
  */
-export default function MaapEntryForm({ formId, entry, workers, allWorkers, defaultDate, getDayTotal, onSubmit }) {
+export default function MaapEntryForm({ formId, entry, allWorkers, defaultDate, previewEntry, onSubmit }) {
   const isEdit = Boolean(entry);
   const schema = useMemo(() => makeMaapEntrySchema({ isEdit }), [isEdit]);
-  const intent = useRef("close");
 
   const {
     register,
@@ -37,16 +37,16 @@ export default function MaapEntryForm({ formId, entry, workers, allWorkers, defa
 
   const [labourId, date, maapsText] = watch(["labourId", "date", "maaps"]);
   const worker = allWorkers.find((w) => w.id === labourId);
-  const rate = isEdit ? entry.ratePerMaap : (worker?.ratePerMaap ?? 0);
+  const rate = isEdit ? entry.ratePerFourMaaps : (worker?.ratePerFourMaaps ?? 0);
   const maaps = validateMaapCount(maapsText) === null ? Number(maapsText) : null;
-  const dayTotal = !isEdit && worker && date ? getDayTotal(labourId, date) : null;
+  const preview = maaps !== null && rate > 0 ? previewEntry({ numberOfMaaps: maaps, ratePerFourMaaps: rate }) : null;
 
   const submit = (values) => {
     if (worker && values.date < worker.joiningDate) {
       setError("date", { type: "validate", message: `${worker.name} had not joined on this date` });
       return;
     }
-    onSubmit(values, intent.current);
+    onSubmit(values);
   };
 
   return (
@@ -54,11 +54,7 @@ export default function MaapEntryForm({ formId, entry, workers, allWorkers, defa
       id={formId}
       noValidate
       className="space-y-4"
-      onSubmit={(e) => {
-        // Which footer button was pressed: "close" (Save Entry) or "another" (Save & Add Another)
-        intent.current = e.nativeEvent.submitter?.value || "close";
-        handleSubmit(submit)(e);
-      }}
+      onSubmit={handleSubmit(submit)}
     >
       <DatePicker label="Date" required max={toISODate()} error={errors.date?.message} {...register("date")} />
 
@@ -69,7 +65,7 @@ export default function MaapEntryForm({ formId, entry, workers, allWorkers, defa
           <LabourPicker
             label="Maapvali Worker"
             placeholder="Select Maapvali worker"
-            labours={isEdit ? allWorkers : workers}
+            labours={allWorkers}
             value={field.value}
             onChange={field.onChange}
             error={errors.labourId?.message}
@@ -83,30 +79,23 @@ export default function MaapEntryForm({ formId, entry, workers, allWorkers, defa
         required
         type="number"
         inputMode="numeric"
-        min="1"
+        min="0"
         step="1"
         placeholder="e.g. 32"
-        hint="Whole maaps only. One maap is about 275 bricks."
+        hint="Whole maaps only. 0 means no work that day."
         error={errors.maaps?.message}
         {...register("maaps")}
       />
 
       <Input
-        label={isEdit ? "Rate per Maap (on this entry)" : "Agreed Rate per Maap"}
-        value={rate > 0 ? `${formatCurrency(rate)} / maap` : "-"}
+        label="Rate per 4 Maaps (on this entry)"
+        value={rate > 0 ? `${formatCurrency(rate)} / 4 maaps` : "-"}
         readOnly
-        hint={isEdit ? "The rate saved with this entry stays as it was." : "From the worker's profile. It cannot be changed here."}
+        hint="The rate saved with this entry stays as it was."
         className="cursor-not-allowed bg-background font-medium text-fg"
       />
 
-      <EarningsPreview maaps={maaps} rate={rate} />
-
-      {dayTotal && dayTotal.entries > 0 && (
-        <p className="rounded-lg bg-warning-soft px-3 py-2.5 text-sm text-amber-900">
-          Already recorded for this date: {dayTotal.maaps} maaps ({formatCurrency(dayTotal.earnings)}). This will be saved as a
-          separate entry.
-        </p>
-      )}
+      <EarningsPreview preview={preview} />
 
       <Textarea label="Note" rows={2} placeholder="Optional" error={errors.note?.message} {...register("note")} />
 

@@ -57,7 +57,7 @@ export default function MaapEntryList({
         </div>
       ),
     },
-    { key: "rate", header: "Rate / maap", align: "right", render: (e) => formatCurrency(e.ratePerMaap) },
+    { key: "rate", header: "Rate / 4 maaps", align: "right", render: (e) => formatCurrency(e.ratePerFourMaaps) },
     { key: "earnings", header: "Earnings", align: "right", className: "font-semibold", render: (e) => formatCurrency(e.earnings) },
     { key: "note", header: "Note", className: "max-w-48 truncate text-fg-muted", render: (e) => e.note || "-" },
     ...(showActions
@@ -101,7 +101,7 @@ export default function MaapEntryList({
               </p>
               <p className="mt-1.5 text-sm font-semibold">{formatNumber(e.numberOfMaaps)} maaps</p>
               <p className="type-small">
-                {formatNumber(e.numberOfMaaps)} x {formatCurrency(e.ratePerMaap)} - about {formatNumber(estimateBricks(e.numberOfMaaps))} bricks
+                {formatNumber(e.numberOfMaaps)} / 4 x {formatCurrency(e.ratePerFourMaaps)} per 4 maaps
               </p>
               {e.note && <p className="type-small mt-1 line-clamp-2">{e.note}</p>}
             </div>

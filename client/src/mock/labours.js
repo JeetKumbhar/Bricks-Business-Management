@@ -1,6 +1,6 @@
 // Mock labour records. Every record has a `labourType` and ONLY the rate field of its own type:
 //   BIGARI    -> dailyRate
-//   MAAPVALI  -> ratePerMaap
+//   MAAPVALI  -> ratePerFourMaaps
 //   PATLAVALE -> ratePer1000PayableBricks   (a family / team; `name` is the team name)
 //
 // `labourSeeds`      - Bigari numbers used to generate attendance + payments (attendance.js, payments.js)
@@ -99,21 +99,21 @@ const bigariRecords = labourSeeds.map(({ id, labourType, name, mobile, village, 
   photo: null, // optional
 }));
 
-// Maapvali: individual workers, each with their own ratePerMaap.
+// Maapvali: individual workers, each with their own ratePerFourMaaps (rate per 4 maaps).
 export const maapvaliRecords = [
-  ["L-049", "Dattu Gaikwad", "9822001049", "Sinnar", 22, "ACTIVE", 90],
-  ["L-050", "Baban Shinde", "9822001050", "Dindori", 24, "ACTIVE", 88],
-  ["L-051", "Kailas More", "9822001051", "Niphad", 25, "ACTIVE", 85],
-  ["L-052", "Sopan Pawar", "9822001052", "Igatpuri", 20, "ACTIVE", 80],
-  ["L-053", "Ramdas Kale", "9822001053", "Yeola", 26, "INACTIVE", 78],
-  ["L-054", "Anna Chavan", "9822001054", "Satana", 28, "ACTIVE", 60],
-].map(([id, name, mobile, village, ratePerMaap, status, joinedDaysAgo]) => ({
+  ["L-049", "Dattu Gaikwad", "9822001049", "Sinnar", 88, "ACTIVE", 90],
+  ["L-050", "Baban Shinde", "9822001050", "Dindori", 96, "ACTIVE", 88],
+  ["L-051", "Kailas More", "9822001051", "Niphad", 100, "ACTIVE", 85],
+  ["L-052", "Sopan Pawar", "9822001052", "Igatpuri", 80, "ACTIVE", 80],
+  ["L-053", "Ramdas Kale", "9822001053", "Yeola", 104, "INACTIVE", 78],
+  ["L-054", "Anna Chavan", "9822001054", "Satana", 112, "ACTIVE", 60],
+].map(([id, name, mobile, village, ratePerFourMaaps, status, joinedDaysAgo]) => ({
   id,
   labourType: "MAAPVALI",
   name,
   mobile,
   village,
-  ratePerMaap,
+  ratePerFourMaaps,
   status,
   joiningDate: daysAgo(joinedDaysAgo),
   photo: null,

@@ -7,7 +7,7 @@ import { getRate } from "../../../utils/formatRate";
 import { LABOUR_TYPE_META } from "../../../utils/labourTypes";
 
 /**
- * Rate history for any type (daily rate, rate per maap, or team rate per 1,000 payable bricks).
+ * Rate history for any type (daily rate, rate per 4 maaps, or team rate per 1,000 payable bricks).
  * history: newest first. Past work keeps the rate it was recorded at.
  * Pass onChangeRate to show the "Change Rate" button. It is only offered for Bigari for now:
  * rate changes for Maapvali and Patlavale are still to be confirmed with the client.

@@ -3,7 +3,7 @@ import { Card, CardBody } from "../components/ui";
 import SettingsSection from "../features/settings/SettingsSection";
 import { dashboardData } from "../mock/dashboard";
 import { ACCOUNTING_POLICY } from "../utils/accountCalculations";
-import { BRICKS_PER_MAAP, PAYABLE_BRICKS_PER_GROUP, PHYSICAL_BRICKS_PER_GROUP } from "../utils/labourTypes";
+import { BRICKS_PER_MAAP, PAYABLE_BRICKS_PER_MAAP } from "../utils/labourTypes";
 import { DRIVERS_LINKED_TO_LABOUR } from "../utils/truckStatus";
 
 const yesNo = (value, yes, no) => (value ? yes : no);
@@ -52,11 +52,11 @@ export default function Settings() {
         rows={[
           { label: "Currency", value: "Indian rupees (₹), Indian digit grouping", status: "confirmed" },
           { label: "Dates", value: "Shown in IST", status: "confirmed" },
-          { label: "Maapvali earnings", value: "Maaps x that worker's rate per maap", status: "confirmed" },
-          { label: "Size of a maap", value: `About ${BRICKS_PER_MAAP} bricks (information only)`, status: "confirmed" },
+          { label: "Maapvali earnings", value: "Maaps / 4 x that worker's rate per 4 maaps. Every maap is paid (41 maaps at 250 per 4 = 2,562.50)", status: "confirmed" },
+          { label: "Size of a maap", value: `4 maaps = ${(BRICKS_PER_MAAP * 4).toLocaleString("en-IN")} physical bricks (${BRICKS_PER_MAAP} each)`, status: "confirmed" },
           {
             label: "Patlavale payable bricks",
-            value: `${PAYABLE_BRICKS_PER_GROUP.toLocaleString("en-IN")} payable for every full ${PHYSICAL_BRICKS_PER_GROUP.toLocaleString("en-IN")} physical bricks; the rest carries forward`,
+            value: `${PAYABLE_BRICKS_PER_MAAP} payable bricks per maap (4 maaps = 1,000). Earnings = maaps / 4 x team rate; no carry-forward`,
             status: "confirmed",
           },
           { label: "Patlavale salary", value: "Paid to the family / team, never split per member", status: "confirmed" },

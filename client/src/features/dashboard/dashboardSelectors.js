@@ -113,7 +113,7 @@ export const buildDashboardData = ({
   const maapToday = maapEntries.filter((e) => e.date === today);
   const maapWeek = maapEntries.filter(inWeek);
 
-  // ---- Patlavale: physical, payable and carry-forward stay separate; payments never touch them ----
+  // ---- Patlavale: maaps, physical and payable bricks stay separate; payments never touch them ----
   const season = summarizeSeason(productionEntries);
 
   // ---- Money ----

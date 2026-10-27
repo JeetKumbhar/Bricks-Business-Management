@@ -9,7 +9,7 @@ import {
   countsAsReceived,
   summarizeTransactions,
 } from "./accountCalculations";
-import { recalculateLedger } from "./productionCalculations";
+import { deriveProductionEntries } from "./dailyWorkCalculations";
 
 const pay = (type, amount, extra = {}) => ({ id: `${type}-${amount}`, labourId: "L-001", type, amount, date: "2026-10-05", isDeleted: false, ...extra });
 
@@ -32,7 +32,7 @@ describe("earnings come from each type's own records", () => {
     expect(buildAccount({ labourType: "BIGARI", attendance, payments: [] })).toMatchObject({ earned: 1800, workingUnits: 2.5 });
   });
 
-  it("Maapvali: maaps x that worker's rate (no attendance, no 1,100-to-1,000 conversion)", () => {
+  it("Maapvali: maaps / 4 x that worker's rate (no attendance, no brick conversion)", () => {
     const maapEntries = [
       { numberOfMaaps: 30, earnings: 660 },
       { numberOfMaaps: 20, earnings: 440 },
@@ -40,16 +40,16 @@ describe("earnings come from each type's own records", () => {
     expect(buildAccount({ labourType: "MAAPVALI", maapEntries, payments: [] })).toMatchObject({ earned: 1100, totalMaaps: 50, workDays: 2 });
   });
 
-  it("Patlavale: payable bricks only (1,500 then 800 at 250 per 1,000)", () => {
-    const productionEntries = recalculateLedger([
-      { id: "p1", date: "2026-10-01", newPhysicalBricks: 1500, ratePer1000PayableBricks: 250 },
-      { id: "p2", date: "2026-10-02", newPhysicalBricks: 800, ratePer1000PayableBricks: 250 },
+  it("Patlavale: every maap pays (5 maaps then 3 maaps at 250 per 4 maaps)", () => {
+    const productionEntries = deriveProductionEntries([
+      { id: "p1", date: "2026-10-01", newMaaps: 5, ratePer1000PayableBricks: 250 },
+      { id: "p2", date: "2026-10-02", newMaaps: 3, ratePer1000PayableBricks: 250 },
     ]);
     expect(buildAccount({ labourType: "PATLAVALE", productionEntries, payments: [] })).toMatchObject({
-      earned: 500,
-      totalPhysicalBricks: 2300,
+      earned: 500, // 8 maaps / 4 x 250
+      totalMaaps: 8,
+      totalPhysicalBricks: 2200,
       totalPayableBricks: 2000,
-      carryForwardBricks: 100,
     });
   });
 
@@ -83,7 +83,7 @@ describe("received transactions: each counted once, no double deduction", () => 
 
 describe("payments never change work or production", () => {
   const maapEntries = [{ id: "m1", labourId: "L-049", date: "2026-10-01", numberOfMaaps: 30, earnings: 660 }];
-  const ledger = recalculateLedger([{ id: "p1", date: "2026-10-01", newPhysicalBricks: 1500, ratePer1000PayableBricks: 250 }]);
+  const ledger = deriveProductionEntries([{ id: "p1", date: "2026-10-01", newMaaps: 5, ratePer1000PayableBricks: 250 }]);
 
   it("Maapvali: maap counts and earnings stay, only the balance moves", () => {
     const worker = { id: "L-049", labourType: "MAAPVALI" };
@@ -93,14 +93,14 @@ describe("payments never change work or production", () => {
     expect(before.balance - after.balance).toBe(200);
   });
 
-  it("Patlavale: production, payable bricks and carry stay, only the balance moves", () => {
+  it("Patlavale: maaps, production and payable bricks stay, only the balance moves", () => {
     const team = { id: "L-055", labourType: "PATLAVALE" };
     const before = buildWorkerStats(team, { production: ledger, payments: [] });
     const after = buildWorkerStats(team, { production: ledger, payments: [pay("SALARY_PAYMENT", 100)] });
-    expect([after.totalPhysicalBricks, after.totalPayableBricks, after.carryForwardBricks, after.earned]).toEqual([
+    expect([after.totalMaaps, after.totalPhysicalBricks, after.totalPayableBricks, after.earned]).toEqual([
+      before.totalMaaps,
       before.totalPhysicalBricks,
       before.totalPayableBricks,
-      before.carryForwardBricks,
       before.earned,
     ]);
     expect(before.balance - after.balance).toBe(100);

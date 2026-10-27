@@ -40,7 +40,7 @@ export default function MaapvaliReport({ rows, period }) {
       columns={columns}
       data={data}
       onExport={exportCsv}
-      note="Earnings = maaps x each worker's rate per maap. Balance is season to date."
+      note="Earnings = maaps / 4 x each worker's rate per 4 maaps (every maap is paid). Balance is season to date."
       renderCard={(r) => (
         <div className="space-y-2.5">
           {cardHeader(r)}

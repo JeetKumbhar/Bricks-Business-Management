@@ -12,8 +12,8 @@ function Tile({ label, value, hint, className }) {
 }
 
 /**
- * Season-to-date totals. Physical bricks, payable bricks and carry-forward are always shown separately.
- * summary: { totalPhysicalBricks, totalPayableBricks, carryForwardBricks, totalEarnings }
+ * Season-to-date totals. Maaps, physical bricks and payable bricks are always shown separately.
+ * summary: { totalMaaps, totalPhysicalBricks, totalPayableBricks, totalEarnings }
  * Payments never change these numbers.
  */
 export default function ProductionSummary({ summary, scope }) {
@@ -24,12 +24,12 @@ export default function ProductionSummary({ summary, scope }) {
         {scope && <span className="type-small truncate">{scope}</span>}
       </div>
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <Tile label="Physical bricks" value={formatNumber(summary.totalPhysicalBricks)} hint="Made so far" />
-        <Tile label="Payable bricks" value={formatNumber(summary.totalPayableBricks)} hint="1,000 per 1,100 made" />
-        <Tile label="Earnings" value={formatCurrency(summary.totalEarnings)} hint="At the team's rate" />
-        <Tile label="Carry-forward" value={formatNumber(summary.carryForwardBricks)} hint="Waiting for a full 1,100" />
+        <Tile label="Maaps" value={formatNumber(summary.totalMaaps)} hint="Recorded so far" />
+        <Tile label="Physical bricks" value={formatNumber(summary.totalPhysicalBricks)} hint="275 per maap" />
+        <Tile label="Payable bricks" value={formatNumber(summary.totalPayableBricks)} hint="250 per maap (4 maaps = 1,000)" />
+        <Tile label="Earnings" value={formatCurrency(summary.totalEarnings)} hint="Maaps / 4 x the team's rate" />
       </div>
-      <p className="type-small mt-2">Payments never change production, payable bricks or carry-forward.</p>
+      <p className="type-small mt-2">Payments never change maaps, production or payable bricks.</p>
     </section>
   );
 }

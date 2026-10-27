@@ -6,7 +6,7 @@
 //   balance          - earnings - total received
 //
 //   BIGARI    earnings = sum of attendance earnings (units x the rate in force that day)
-//   MAAPVALI  earnings = sum of maap entry earnings (maaps x the worker's rate per maap)
+//   MAAPVALI  earnings = sum of maap entry earnings (maaps / 4 x the worker's rate per 4 maaps)
 //   PATLAVALE earnings = sum of payable-brick earnings in the production ledger
 //
 // Every transaction is counted exactly once. Bayana is a payment type like any other: it is part of
@@ -70,14 +70,14 @@ export const calculateBigariEarnings = (attendance = []) => ({
   workingUnits: sum(attendance, (r) => r.units),
 });
 
-/** Maapvali: maaps x that worker's rate (each entry carries the rate it was recorded at). */
+/** Maapvali: sum of entry earnings (each entry = maaps / 4 x the rate it was recorded at; every maap is paid). */
 export const calculateMaapvaliEarnings = (entries = []) => ({
   earned: sum(entries, (e) => e.earnings),
   totalMaaps: sum(entries, (e) => e.numberOfMaaps),
   workDays: entries.length,
 });
 
-/** Patlavale: payable bricks x the team's rate. Physical, payable and carry-forward bricks stay separate. */
+/** Patlavale: earnings = maaps / 4 x the team's rate (250 payable bricks per maap). Maaps, physical and payable bricks stay separate. */
 export const calculatePatlavaleEarnings = (entries = []) => {
   const ledger = [...entries].sort((a, b) => a.date.localeCompare(b.date));
   const production = summarizeProduction(ledger);
@@ -85,7 +85,7 @@ export const calculatePatlavaleEarnings = (entries = []) => {
     earned: production.totalEarnings,
     totalPhysicalBricks: production.totalPhysicalBricks,
     totalPayableBricks: production.totalPayableBricks,
-    carryForwardBricks: production.carryForwardBricks,
+    totalMaaps: production.totalMaaps,
     productionDays: ledger.length,
   };
 };

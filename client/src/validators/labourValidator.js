@@ -4,7 +4,7 @@ import { LABOUR_STATUS } from "../utils/labourStatus";
 
 /**
  * Add / Edit labour form (all three types).
- * The form has ONE `rate` field; which record field it ends up in (dailyRate, ratePerMaap or
+ * The form has ONE `rate` field; which record field it ends up in (dailyRate, ratePerFourMaaps or
  * ratePer1000PayableBricks) is decided by `labourType` in toLabourInput(), so a rate typed for one
  * type can never land in another type's field.
  * Labour ID is auto-generated and not part of the form values.

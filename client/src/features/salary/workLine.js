@@ -8,7 +8,7 @@ export const workLine = (row) => {
   if (row.labourType === LABOUR_TYPES.PATLAVALE) {
     return {
       primary: `${formatNumber(w.payableBricks)} payable bricks`,
-      secondary: `${formatNumber(w.physicalBricks)} physical, carry ${formatNumber(w.carryForwardBricks)}`,
+      secondary: `${formatNumber(w.maaps)} maaps, ${formatNumber(w.physicalBricks)} physical`,
     };
   }
   return { primary: `${w.workingUnits} days`, secondary: `${w.presentDays} full, ${w.halfDays} half, ${w.absentDays} absent` };

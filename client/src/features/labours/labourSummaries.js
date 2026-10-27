@@ -10,7 +10,7 @@ export const getWorkSummary = (worker) => {
   if (worker.labourType === LABOUR_TYPES.PATLAVALE) {
     return {
       primary: `${formatNumber(worker.totalPayableBricks)} payable bricks`,
-      secondary: `${formatNumber(worker.totalPhysicalBricks)} physical, ${formatNumber(worker.carryForwardBricks)} carry`,
+      secondary: `${formatNumber(worker.totalMaaps)} maaps, ${formatNumber(worker.totalPhysicalBricks)} physical`,
     };
   }
   return {

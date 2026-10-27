@@ -1,6 +1,6 @@
 // Rate history: one "Initial rate" entry per labour + two demo Bigari rate changes.
 // Shape: { id, labourId, rateType, rate, effectiveFrom, reason, changedBy, createdAt }
-// rateType: DAILY_RATE (Bigari) | RATE_PER_MAAP (Maapvali) | RATE_PER_1000_PAYABLE_BRICKS (Patlavale)
+// rateType: DAILY_RATE (Bigari) | RATE_PER_FOUR_MAAPS (Maapvali) | RATE_PER_1000_PAYABLE_BRICKS (Patlavale)
 // Whether Maapvali / Patlavale rates may change is still to be confirmed; the shape allows it.
 import { toISODate } from "../utils/formatDate";
 import { LABOUR_TYPE_META } from "../utils/labourTypes";

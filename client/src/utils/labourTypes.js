@@ -7,7 +7,7 @@ export const LABOUR_TYPES = {
 
 export const RATE_TYPES = {
   DAILY_RATE: "DAILY_RATE",
-  RATE_PER_MAAP: "RATE_PER_MAAP",
+  RATE_PER_FOUR_MAAPS: "RATE_PER_FOUR_MAAPS",
   RATE_PER_1000_PAYABLE_BRICKS: "RATE_PER_1000_PAYABLE_BRICKS",
 };
 
@@ -38,17 +38,17 @@ export const LABOUR_TYPE_META = {
     noun: "worker",
     plural: "workers",
     badgeVariant: "purple",
-    description: "Individual worker who transports bricks, paid for every maap carried.",
+    description: "Individual worker who transports bricks, paid for every maap carried (rate set per 4 maaps).",
     nameLabel: "Name",
     mobileLabel: "Mobile",
-    rateField: "ratePerMaap",
-    rateType: RATE_TYPES.RATE_PER_MAAP,
-    rateLabel: "Rate per maap",
-    rateInputLabel: "Rate per Maap (₹/maap)",
-    rateUnit: "per maap",
-    rateUnitShort: "/ maap",
-    ratePlaceholder: "e.g. 22",
-    rateHint: "One maap is about 275 bricks. Each worker has their own rate.",
+    rateField: "ratePerFourMaaps",
+    rateType: RATE_TYPES.RATE_PER_FOUR_MAAPS,
+    rateLabel: "Rate per 4 maaps",
+    rateInputLabel: "Rate per 4 Maaps (₹)",
+    rateUnit: "per 4 maaps",
+    rateUnitShort: "/ 4 maaps",
+    ratePlaceholder: "e.g. 88",
+    rateHint: "Rate for 4 maaps (1,000 bricks). Every maap is paid in proportion, e.g. 5 maaps = 1.25 x the rate.",
     rateLockedHint: "Rate changes for Maapvali are not available yet",
   },
   PATLAVALE: {
@@ -62,21 +62,21 @@ export const LABOUR_TYPE_META = {
     mobileLabel: "Contact Mobile",
     rateField: "ratePer1000PayableBricks",
     rateType: RATE_TYPES.RATE_PER_1000_PAYABLE_BRICKS,
-    rateLabel: "Rate per 1,000 payable bricks",
-    rateInputLabel: "Team Rate per 1,000 Payable Bricks (₹)",
-    rateUnit: "per 1,000 payable bricks",
-    rateUnitShort: "/ 1,000 bricks",
+    rateLabel: "Rate per 4 maaps / 1,000 payable bricks",
+    rateInputLabel: "Team Rate per 4 Maaps / 1,000 Payable Bricks (₹)",
+    rateUnit: "per 4 maaps (1,000 payable bricks)",
+    rateUnitShort: "/ 4 maaps",
     ratePlaceholder: "e.g. 650",
-    rateHint: "Every 1,100 physical bricks pay for 1,000 payable bricks.",
+    rateHint: "Rate for 4 maaps = 1,000 payable bricks. Every maap is paid in proportion (250 payable bricks each).",
     rateLockedHint: "Rate changes for Patlavale teams are not available yet",
   },
 };
 
 export const LABOUR_TYPE_OPTIONS = Object.entries(LABOUR_TYPE_META).map(([value, meta]) => ({ value, label: meta.label }));
 
-// 1 maap is approximately 275 bricks; 4 maaps = 1,100 physical bricks.
+// 4 maaps = 1,100 physical bricks (275 per maap), of which 1,000 are payable (250 per maap).
 export const BRICKS_PER_MAAP = 275;
+export const PAYABLE_BRICKS_PER_MAAP = 250;
 
-// Patlavale: every completed group of 1,100 physical bricks pays for 1,000 bricks.
-export const PHYSICAL_BRICKS_PER_GROUP = 1100;
-export const PAYABLE_BRICKS_PER_GROUP = 1000;
+// The rate is configured per 4 maaps (= 1,000 payable bricks); every maap is paid in proportion (maaps / 4 x rate).
+export const MAAPS_PER_RATE_UNIT = 4;

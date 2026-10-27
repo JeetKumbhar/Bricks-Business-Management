@@ -11,10 +11,13 @@ import { validateMocks } from "../mock/validateMocks";
 import {
   applyProductionCorrection,
   applyProductionDelete,
-  createProductionEntry,
-  rechainTeamLedger,
+  upsertProductionDay,
 } from "../features/production/productionEntryOps";
-import { applyMaapCorrection, applyMaapDelete, createMaapEntry } from "../features/work/maapvali/maapEntryOps";
+import {
+  applyMaapCorrection,
+  applyMaapDelete,
+  upsertMaapDay,
+} from "../features/work/maapvali/maapEntryOps";
 import { LABOUR_TYPE_META, LABOUR_TYPES } from "../utils/labourTypes";
 import { labourRecordSchema, paymentRecordSchema } from "../validators/labourRecordValidator";
 
@@ -283,17 +286,7 @@ export function LabourProvider({ children }) {
     [allMaapEntries]
   );
 
-  /** input: { labourId, date, numberOfMaaps, note }. The rate comes from the worker's profile. */
-  const addMaapEntry = useCallback(
-    ({ labourId, date, numberOfMaaps, note }) => {
-      const worker = baseLabours.find((l) => l.id === labourId);
-      const entry = createMaapEntry({ worker, date, numberOfMaaps, note, seasonId: CURRENT_SEASON_ID });
-      setMaapEntries((prev) => [...prev, entry]);
-      return entry;
-    },
-    [baseLabours]
-  );
-
+  /** A correction recalculates only that entry (entries are independent: there is no carry-forward). */
   const updateMaapEntry = useCallback((id, changes, reason) => {
     setMaapEntries((prev) => prev.map((e) => (e.id === id ? applyMaapCorrection(e, changes, reason) : e)));
   }, []);
@@ -302,9 +295,32 @@ export function LabourProvider({ children }) {
     setMaapEntries((prev) => prev.map((e) => (e.id === id ? applyMaapDelete(e, reason) : e)));
   }, []);
 
+  /**
+   * Save a whole day of Maapvali work in one action. rows: [{ labourId, maaps, note }].
+   * One record per worker and date (saving again updates it). Returns the number of records created or corrected.
+   */
+  const saveMaapDay = useCallback(
+    (date, rows, reason) => {
+      const byId = Object.fromEntries(baseLabours.map((l) => [l.id, l]));
+      const valid = rows
+        .filter((r) => byId[r.labourId]?.labourType === "MAAPVALI")
+        .map((r) => ({ worker: byId[r.labourId], maaps: r.maaps, note: r.note ?? "" }));
+      const { entries, changedIds } = upsertMaapDay({
+        allEntries: maapEntries,
+        date,
+        rows: valid,
+        reason,
+        seasonId: CURRENT_SEASON_ID,
+      });
+      setMaapEntries(entries);
+      return changedIds.length;
+    },
+    [baseLabours, maapEntries]
+  );
+
   // ---- Patlavale production ledger (it never touches payments) ----
 
-  /** Every production entry that is not deleted, oldest first (the order the carry-forward chain runs in). */
+  /** Every production entry that is not deleted, oldest first. */
   const allProductionEntries = useMemo(
     () =>
       productionEntries
@@ -313,39 +329,36 @@ export function LabourProvider({ children }) {
     [productionEntries]
   );
 
-  /** input: { teamId, date, newPhysicalBricks, note }. The rate comes from the team's profile; derived values are calculated. */
-  const addProductionEntry = useCallback(
-    ({ teamId, date, newPhysicalBricks, note }) => {
-      const team = baseLabours.find((l) => l.id === teamId);
-      const created = createProductionEntry({ team, date, newPhysicalBricks, note, seasonId: CURRENT_SEASON_ID });
-      const next = rechainTeamLedger([...productionEntries, created], teamId);
-      setProductionEntries(next);
-      return next.find((e) => e.id === created.id);
+  /**
+   * Save a whole day of Patlavale production in one action. rows: [{ teamId, maaps, note }].
+   * One record per team and date (saving again updates it). Returns the number of records created or corrected.
+   */
+  const saveProductionDay = useCallback(
+    (date, rows, reason) => {
+      const byId = Object.fromEntries(baseLabours.map((l) => [l.id, l]));
+      const valid = rows
+        .filter((r) => byId[r.teamId]?.labourType === "PATLAVALE")
+        .map((r) => ({ team: byId[r.teamId], maaps: r.maaps, note: r.note ?? "" }));
+      const { entries, changedIds } = upsertProductionDay({
+        allEntries: productionEntries,
+        date,
+        rows: valid,
+        reason,
+        seasonId: CURRENT_SEASON_ID,
+      });
+      setProductionEntries(entries);
+      return changedIds.length;
     },
     [baseLabours, productionEntries]
   );
 
-  /** A correction or a deletion re-chains the whole team ledger, because the carry-forward of later days changes. */
+  /** A correction recalculates only that entry (entries are independent: there is no carry-forward). */
   const updateProductionEntry = useCallback((id, changes, reason) => {
-    setProductionEntries((prev) => {
-      const target = prev.find((e) => e.id === id);
-      if (!target) return prev;
-      return rechainTeamLedger(
-        prev.map((e) => (e.id === id ? applyProductionCorrection(e, changes, reason) : e)),
-        target.teamId
-      );
-    });
+    setProductionEntries((prev) => prev.map((e) => (e.id === id ? applyProductionCorrection(e, changes, reason) : e)));
   }, []);
 
   const deleteProductionEntry = useCallback((id, reason) => {
-    setProductionEntries((prev) => {
-      const target = prev.find((e) => e.id === id);
-      if (!target) return prev;
-      return rechainTeamLedger(
-        prev.map((e) => (e.id === id ? applyProductionDelete(e, reason) : e)),
-        target.teamId
-      );
-    });
+    setProductionEntries((prev) => prev.map((e) => (e.id === id ? applyProductionDelete(e, reason) : e)));
   }, []);
 
   const getLabour = useCallback((id) => labours.find((l) => l.id === id), [labours]);
@@ -391,16 +404,16 @@ export function LabourProvider({ children }) {
       deletePayment,
       allMaapEntries,
       getMaapEntries,
-      addMaapEntry,
       updateMaapEntry,
       deleteMaapEntry,
+      saveMaapDay,
       allProductionEntries,
-      addProductionEntry,
+      saveProductionDay,
       updateProductionEntry,
       deleteProductionEntry,
       getRateHistory,
     }),
-    [labours, allLabours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, deletedPayments, addPayment, updatePayment, deletePayment, allMaapEntries, getMaapEntries, addMaapEntry, updateMaapEntry, deleteMaapEntry, allProductionEntries, addProductionEntry, updateProductionEntry, deleteProductionEntry, getRateHistory]
+    [labours, allLabours, nextLabourId, addLabour, updateLabour, isMobileTaken, changeRate, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, deletedPayments, addPayment, updatePayment, deletePayment, allMaapEntries, getMaapEntries, updateMaapEntry, deleteMaapEntry, saveMaapDay, allProductionEntries, saveProductionDay, updateProductionEntry, deleteProductionEntry, getRateHistory]
   );
 
   return <LabourContext.Provider value={value}>{children}</LabourContext.Provider>;

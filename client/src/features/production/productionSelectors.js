@@ -1,4 +1,7 @@
+import { getPatlavaleCalculation } from "../../utils/dailyWorkCalculations";
 import { addDaysISO } from "../../utils/formatDate";
+import { LABOUR_STATUS } from "../../utils/labourStatus";
+import { buildDailyRows, summarizeDay } from "../work/shared/dailyRows";
 import { summarizeProduction } from "../../utils/productionCalculations";
 
 /** teamId: "ALL" or a team id. period: "ALL" | "TODAY" | "WEEK" (today and the 6 days before). */
@@ -13,22 +16,25 @@ export const filterProductionEntries = (entries, { teamId = "ALL", period = "ALL
 };
 
 /**
- * Season-to-date totals. `entries` must be oldest first.
- * For several teams each team's ledger is summed on its own (carry-forward belongs to a team, never shared).
+ * Season-to-date totals over every entry given. Maaps, physical bricks, payable bricks and earnings are shown separately.
+ * Payments never change them.
  */
-export const summarizeSeason = (entries) => {
-  const byTeam = {};
-  entries.forEach((e) => (byTeam[e.teamId] ||= []).push(e));
+export const summarizeSeason = (entries) => summarizeProduction(entries);
 
-  return Object.values(byTeam)
-    .map((teamEntries) => summarizeProduction(teamEntries))
-    .reduce(
-      (total, s) => ({
-        totalPhysicalBricks: total.totalPhysicalBricks + s.totalPhysicalBricks,
-        totalPayableBricks: total.totalPayableBricks + s.totalPayableBricks,
-        carryForwardBricks: total.carryForwardBricks + s.carryForwardBricks,
-        totalEarnings: total.totalEarnings + s.totalEarnings,
-      }),
-      { totalPhysicalBricks: 0, totalPayableBricks: 0, carryForwardBricks: 0, totalEarnings: 0 }
-    );
+/** Who is on the daily sheet: ACTIVE teams that had joined by that date. Inactive teams keep their history elsewhere. */
+export const getDailyTeamRoster = (teams, date) =>
+  teams.filter((t) => t.status === LABOUR_STATUS.ACTIVE && t.joiningDate <= date);
+
+const TEAM_ROWS = {
+  idKey: "teamId",
+  enteredKey: "newMaaps",
+  rateOf: (team) => team.ratePer1000PayableBricks,
+  savedRateOf: (entry) => entry.ratePer1000PayableBricks,
+  calculate: getPatlavaleCalculation,
 };
+
+/** One row per rostered team for the selected date (see features/work/shared/dailyRows.js). */
+export const buildProductionDailyRows = ({ roster, entries, date, draft }) =>
+  buildDailyRows({ roster, entries, date, draft, config: TEAM_ROWS });
+
+export const summarizeProductionDay = summarizeDay;

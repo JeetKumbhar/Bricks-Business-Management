@@ -10,7 +10,7 @@ const iconButton = "rounded-lg p-2 text-fg-muted hover:bg-background hover:text-
 
 /**
  * The ledger: one row per production entry, newest first.
- * Date, Team, New physical, Previous carry, Available, Groups, Payable, Carry after, Rate, Earnings, Note.
+ * Date, Team, Maaps, Physical bricks, Payable bricks, Rate, Earnings, Note.
  * Phones get one card per entry, md+ gets a table. Pass onEdit / onDelete to show the actions.
  */
 export default function ProductionLedger({
@@ -54,13 +54,10 @@ export default function ProductionLedger({
           },
         ]
       : []),
-    number("newPhysicalBricks", "New physical"),
-    number("previousCarryBricks", "Previous carry"),
-    number("physicalAvailable", "Available"),
-    number("completedGroups", "Groups of 1,100"),
-    number("newPayableBricks", "Payable", { className: "font-semibold" }),
-    number("carryForwardBricks", "Carry after"),
-    { key: "rate", header: "Rate / 1,000", align: "right", render: (e) => formatCurrency(e.ratePer1000PayableBricks) },
+    number("newMaaps", "Maaps"),
+    number("newPhysicalBricks", "Physical bricks"),
+    number("newPayableBricks", "Payable bricks", { className: "font-semibold" }),
+    { key: "rate", header: "Rate / 4 maaps", align: "right", render: (e) => formatCurrency(e.ratePer1000PayableBricks) },
     { key: "newEarnings", header: "Earnings", align: "right", className: "font-semibold", render: (e) => formatCurrency(e.newEarnings) },
     { key: "note", header: "Note", className: "max-w-48 truncate text-fg-muted", render: (e) => e.note || "-" },
     ...(showActions
@@ -113,7 +110,7 @@ export default function ProductionLedger({
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-base font-bold">{formatCurrency(e.newEarnings)}</p>
-                <p className="type-small">{formatCurrency(e.ratePer1000PayableBricks)} / 1,000</p>
+                <p className="type-small">{formatCurrency(e.ratePer1000PayableBricks)} / 4 maaps</p>
               </div>
               {showActions && (
                 <Dropdown
@@ -128,12 +125,9 @@ export default function ProductionLedger({
             </div>
 
             <dl className="grid grid-cols-3 gap-x-3 gap-y-2.5 rounded-lg bg-background p-3 text-sm">
-              <Cell label="New physical" value={formatNumber(e.newPhysicalBricks)} />
-              <Cell label="Previous carry" value={formatNumber(e.previousCarryBricks)} />
-              <Cell label="Available" value={formatNumber(e.physicalAvailable)} />
-              <Cell label="Groups of 1,100" value={formatNumber(e.completedGroups)} />
-              <Cell label="Payable" value={formatNumber(e.newPayableBricks)} strong />
-              <Cell label="Carry after" value={formatNumber(e.carryForwardBricks)} />
+              <Cell label="Maaps" value={formatNumber(e.newMaaps)} />
+              <Cell label="Physical bricks" value={formatNumber(e.newPhysicalBricks)} />
+              <Cell label="Payable bricks" value={formatNumber(e.newPayableBricks)} strong />
             </dl>
             {e.note && <p className="type-small line-clamp-2">{e.note}</p>}
           </div>
