@@ -32,18 +32,19 @@ function ProductionDailyRow({ row, onMaapsChange, onNoteChange }) {
           </p>
         </div>
         <div className="w-28 shrink-0 sm:w-32">
+          <p className="mb-1 text-center text-[11px] font-semibold text-primary">Enter maaps</p>
           <input
             type="number"
             inputMode="numeric"
             min="0"
             step="1"
             value={text}
-            placeholder="Maaps"
+            placeholder="0"
             aria-label={`Maaps today for ${team.name}`}
             aria-invalid={Boolean(error)}
             onChange={(e) => onMaapsChange(team.id, e.target.value)}
             onWheel={(e) => e.currentTarget.blur()}
-            className={cn(fieldBase, fieldState(error), "h-12 text-center text-lg font-semibold md:h-10")}
+            className={cn(fieldBase, fieldState(error), "h-12 text-center text-lg font-semibold ring-1 ring-primary/30 md:h-10")}
           />
         </div>
       </div>
@@ -57,6 +58,7 @@ function ProductionDailyRow({ row, onMaapsChange, onNoteChange }) {
         <Fact label="Earnings" value={calc ? formatCurrency(calc.earnings) : "-"} strong />
       </div>
 
+      <p className="type-small">Note (optional, not maaps)</p>
       <input
         type="text"
         value={note}

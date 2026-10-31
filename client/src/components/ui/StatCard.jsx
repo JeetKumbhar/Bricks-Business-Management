@@ -15,6 +15,8 @@ const palette = {
  *
  * <StatCard title="Total Labour" value={48} icon={Users} color="blue" actionLabel="View All" onAction={...} />
  * color: blue | green | yellow | red | purple     variant: solid | soft
+ * Optional: onCardClick makes the whole tile a link (the action label then becomes plain text so it never fires twice),
+ * tag = small category label above the title, caption = small note under the value.
  */
 export default function StatCard({
   title,
@@ -24,16 +26,37 @@ export default function StatCard({
   variant = "solid",
   actionLabel,
   onAction,
+  onCardClick,
+  tag,
+  caption,
   className,
 }) {
   const c = palette[color] ?? palette.blue;
   const solid = variant === "solid";
 
+  const clickable = Boolean(onCardClick);
+  const ActionTag = clickable ? "span" : "button";
+
   return (
     <div
+      {...(clickable
+        ? {
+            role: "link",
+            tabIndex: 0,
+            onClick: onCardClick,
+            onKeyDown: (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onCardClick();
+              }
+            },
+            "aria-label": `${title}: ${value}`,
+          }
+        : {})}
       className={cn(
         "flex flex-col items-start gap-2.5 rounded-xl p-3.5 shadow-card sm:flex-row sm:items-center sm:gap-4 sm:p-5",
         solid ? [c.solid, "text-white"] : ["border", c.soft, "text-fg"],
+        clickable && "cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
         className
       )}
     >
@@ -47,12 +70,15 @@ export default function StatCard({
       </div>
 
       <div className="min-w-0 max-w-full">
+        {tag && (
+          <p className={cn("text-[10px] font-semibold uppercase tracking-wider", solid ? "text-white/70" : "text-fg-muted/80")}>{tag}</p>
+        )}
         <p className={cn("text-xs sm:text-sm", solid ? "text-white/90" : "text-fg-muted")}>{title}</p>
         <p className="truncate text-2xl font-bold leading-tight sm:text-3xl">{value}</p>
+        {caption && <p className={cn("text-[11px] leading-snug sm:text-xs", solid ? "text-white/85" : "text-fg-muted")}>{caption}</p>}
         {actionLabel && (
-          <button
-            type="button"
-            onClick={onAction}
+          <ActionTag
+            {...(clickable ? {} : { type: "button", onClick: onAction })}
             className={cn(
               "mt-0.5 inline-flex items-center gap-1 py-1 text-xs font-medium sm:text-sm",
               solid ? "text-white/90 hover:text-white" : c.link
@@ -60,7 +86,7 @@ export default function StatCard({
           >
             {actionLabel}
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+          </ActionTag>
         )}
       </div>
     </div>

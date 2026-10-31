@@ -30,21 +30,22 @@ export default function Dashboard() {
         <p className="text-sm font-medium text-fg-muted">{formatLongDate(now)}</p>
       </div>
 
-      <DashboardStats workers={data.workers} attendanceToday={data.attendanceToday} maap={data.maap} money={data.money} />
+      <DashboardStats attendanceToday={data.attendanceToday} maap={data.maap} production={data.production} money={data.money} />
 
       <PatlavaleProductionCard production={data.production} />
 
       <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-3">
-        <AttendanceSummary data={data.weeklyAttendance} className="lg:col-span-2" />
-        <TruckStatus trucks={data.trucks} attention={data.truckAttention} />
+        <TypeBalances money={data.money} className="lg:col-span-2" />
+        <RecentActivities activities={data.recentActivities} />
 
         <PaymentSummary data={data.weeklyPayments} className="lg:col-span-2" />
         <WeeklySalarySummary earnings={data.weeklyEarnings} />
 
-        <TypeBalances money={data.money} className="lg:col-span-2" />
-        <RecentActivities activities={data.recentActivities} />
+        <RecentPayments payments={data.recentPayments} className="lg:col-span-2" />
+        <TruckStatus trucks={data.trucks} attention={data.truckAttention} />
 
-        <RecentPayments payments={data.recentPayments} className="lg:col-span-3" />
+        {/* Always the last section */}
+        <AttendanceSummary data={data.weeklyAttendance} className="lg:col-span-3" />
       </div>
     </div>
   );

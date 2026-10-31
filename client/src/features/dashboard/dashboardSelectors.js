@@ -115,6 +115,7 @@ export const buildDashboardData = ({
 
   // ---- Patlavale: maaps, physical and payable bricks stay separate; payments never touch them ----
   const season = summarizeSeason(productionEntries);
+  const productionToday = productionEntries.filter((e) => e.date === today);
 
   // ---- Money ----
   const byType = [LABOUR_TYPES.BIGARI, LABOUR_TYPES.MAAPVALI, LABOUR_TYPES.PATLAVALE].map((type) => {
@@ -174,7 +175,7 @@ export const buildDashboardData = ({
       todayEarnings: sum(maapToday, (e) => e.earnings),
       weekMaaps: sum(maapWeek, (e) => e.numberOfMaaps),
     },
-    production: { season, activeTeams: patlavale.filter(isActive).length, teams: patlavale.length },
+    production: { season, todayMaaps: sum(productionToday, (e) => e.newMaaps), activeTeams: patlavale.filter(isActive).length, teams: patlavale.length },
     money: { outstanding, overpaid, overpaidCount, paidLast7: sum(weekPayments, (p) => p.amount), byType },
     weeklyPayments,
     weeklyEarnings,
