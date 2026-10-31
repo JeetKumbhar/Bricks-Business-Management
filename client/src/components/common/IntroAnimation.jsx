@@ -212,7 +212,7 @@ export default function IntroAnimation() {
       ref={rootRef}
       role="status"
       aria-label="AAYUSH CARTING"
-      className="fixed inset-0 z-[1000] flex flex-col items-center justify-center overflow-hidden"
+      className="fixed inset-0 z-1000 flex flex-col items-center justify-center overflow-hidden"
       style={{ background: BG }}
     >
       <div className="relative z-10 shrink-0 px-4 pt-6 text-center sm:pt-0" style={{ marginBottom: "clamp(0px, 1vh, 12px)" }}>
@@ -239,7 +239,7 @@ export default function IntroAnimation() {
         </p>
       </div>
 
-      <div className="relative w-full min-h-[240px] max-sm:min-h-0 max-sm:flex-1 sm:h-[clamp(240px,46vh,480px)]" aria-hidden="true">
+      <div className="relative w-full min-h-240px max-sm:min-h-0 max-sm:flex-1 sm:h-[clamp(240px,46vh,480px)]" aria-hidden="true">
         <div ref={hostRef} className="absolute inset-0" />
       </div>
     </div>
