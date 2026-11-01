@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// These tests must never read a real server/.env (it would fill the variables back in, and a failure would print them).
+vi.mock("dotenv", () => ({ default: { config: () => ({}) } }));
+
 // env.js reads process.env when it is first imported, so each case imports a fresh copy.
 const KEYS = ["NODE_ENV", "JWT_SECRET", "JWT_EXPIRES_IN", "COOKIE_SAME_SITE", "BCRYPT_ROUNDS", "TRUST_PROXY", "CLIENT_ORIGIN"];
 const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
