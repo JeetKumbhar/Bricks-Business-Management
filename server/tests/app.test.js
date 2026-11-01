@@ -49,18 +49,25 @@ describe("GET /api/health", () => {
   });
 });
 
-describe("404 handling", () => {
-  it("returns a controlled JSON 404 for an unknown route", async () => {
+describe("unknown routes", () => {
+  it("answers 401 for an unknown /api route when not signed in (private by default)", async () => {
     const res = await request(app).get("/api/nope?x=1");
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ success: false, message: "Route not found: GET /api/nope" });
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ success: false, message: "Authentication required" });
   });
 
-  it("404s on an unsupported method of a known path", async () => {
-    const res = await request(app).post("/api/health");
+  it("returns a controlled JSON 404 outside /api", async () => {
+    const res = await request(app).get("/nope?x=1");
     expect(res.status).toBe(404);
+    expect(res.body).toEqual({ success: false, message: "Route not found: GET /nope" });
+  });
+
+  it("does not expose unsupported methods of a known public path", async () => {
+    const res = await request(app).post("/api/health");
+    expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
   });
+  // The signed-in 404 for an unknown /api route is covered in auth.test.js.
 });
 
 describe("error handling", () => {
