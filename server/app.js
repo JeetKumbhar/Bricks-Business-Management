@@ -10,6 +10,7 @@ import originCheck from "./middlewares/originCheck.middleware.js";
 import { createLoginLimiter } from "./middlewares/rateLimit.middleware.js";
 import { createAuthRouter } from "./routes/auth.routes.js";
 import healthRoutes from "./routes/health.routes.js";
+import labourRoutes from "./routes/labour.routes.js";
 
 // Built as a function so tests can create a fresh app. Nothing here listens on a port (see server.js).
 // options.loginRateLimit lets tests use a small limit; production uses the defaults.
@@ -46,7 +47,8 @@ export function createApp({ loginRateLimit } = {}) {
   // Private by default: a business router mounted after this line (labour, attendance, payments...) cannot be reached
   // without signing in, even if its author forgets to add a check.
   app.use("/api", requireAuth);
-  // Business routers (labour, attendance, ...) are mounted here in their own phases.
+  // Business routers are mounted here, one phase at a time.
+  app.use("/api/labours", labourRoutes);
 
   app.use(notFound);
   app.use(errorHandler);
