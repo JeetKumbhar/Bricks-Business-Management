@@ -1,6 +1,10 @@
 import express from "express";
 import request from "supertest";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The health route asks the database module for its state; tests control that answer.
+const { getDbStatus } = vi.hoisted(() => ({ getDbStatus: vi.fn() }));
+vi.mock("../config/db.js", () => ({ getDbStatus }));
 
 process.env.NODE_ENV = "test";
 process.env.CLIENT_ORIGIN = "http://localhost:5173, https://app.example.com/";
@@ -13,17 +17,30 @@ beforeAll(async () => {
 });
 
 describe("GET /api/health", () => {
-  it("returns the documented success response", async () => {
+  beforeEach(() => getDbStatus.mockResolvedValue({ status: "connected", name: "brickpro" }));
+
+  it("returns the documented success response when the database is connected", async () => {
     const res = await request(app).get("/api/health");
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toMatch(/json/);
     expect(res.body).toMatchObject({
       success: true,
       message: "Server is healthy",
-      data: { status: "ok", environment: "test" },
+      data: { status: "ok", environment: "test", database: { status: "connected", name: "brickpro" } },
     });
     expect(typeof res.body.data.uptimeSeconds).toBe("number");
     expect(new Date(res.body.data.timestamp).toString()).not.toBe("Invalid Date");
+  });
+
+  it.each(["disconnected", "connecting", "unreachable"])("returns 503 when the database is %s", async (status) => {
+    getDbStatus.mockResolvedValue({ status });
+    const res = await request(app).get("/api/health");
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({
+      success: false,
+      message: "Server is running but the database is not available",
+      data: { status: "degraded", database: { status } },
+    });
   });
 
   it("does not advertise Express", async () => {

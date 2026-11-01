@@ -1,6 +1,6 @@
 # BrickPro server
 
-Express API for BrickPro. **Phase 1 only:** the server foundation. There is no database and there are no business routes yet.
+Express API for BrickPro, with a MongoDB connection (Phase 2). There are no business routes or models yet.
 
 Requires Node 20.6 or newer.
 
@@ -9,8 +9,17 @@ Requires Node 20.6 or newer.
 ```bash
 cd server
 npm install
-cp .env.example .env      # then edit if needed
+cp .env.example .env      # then set MONGODB_URI (see below)
 ```
+
+### Database
+
+`MONGODB_URI` is required. The server connects first and exits with a clear message if it cannot, so nothing is served without a database.
+
+- **Atlas:** create a free cluster, add a database user, add your IP under Network Access, then copy the `mongodb+srv://...` string into `.env` with a database name, e.g. `...mongodb.net/brickpro?retryWrites=true&w=majority`.
+- **Local:** `docker run -d --name brickpro-mongo -p 27017:27017 mongo:7`, then `MONGODB_URI=mongodb://127.0.0.1:27017/brickpro_dev`.
+
+Step-by-step notes, error meanings, and the money and date rules are in [`docs/DATABASE_CONVENTIONS.md`](../docs/DATABASE_CONVENTIONS.md).
 
 ## Commands
 
@@ -18,7 +27,7 @@ cp .env.example .env      # then edit if needed
 |---|---|
 | `npm run dev` | Start with automatic restart on file changes |
 | `npm start` | Start for production (`NODE_ENV=production`) |
-| `npm test` | Run the tests (Vitest + Supertest) |
+| `npm test` | Run the tests (Vitest + Supertest). They need no database |
 
 The server listens on `http://localhost:5000` by default.
 
@@ -31,11 +40,11 @@ Loaded from `server/.env` (never committed; `.env.example` is the template).
 | `NODE_ENV` | `development` | `development`, `test` or `production` |
 | `PORT` | `5000` | |
 | `CLIENT_ORIGIN` | `http://localhost:5173` | Browser origin allowed by CORS. Comma-separate several, no trailing slash. `*` is rejected in production |
-| `MONGODB_URI` | blank | Not used yet (database phase) |
+| `MONGODB_URI` | blank | **Required.** Atlas or local connection string including the database name |
 | `JWT_SECRET` | blank | Not used yet (auth phase) |
 | `JWT_EXPIRES_IN` | blank | Not used yet (auth phase) |
 
-An invalid `NODE_ENV`, `PORT` or empty `CLIENT_ORIGIN` stops the server at start-up with a clear message.
+An invalid `NODE_ENV`, `PORT` or empty `CLIENT_ORIGIN` stops the server at start-up with a clear message. So does a missing, malformed, unreachable or wrongly authenticated `MONGODB_URI`; the password is never printed.
 
 ## API
 
@@ -60,13 +69,14 @@ An invalid `NODE_ENV`, `PORT` or empty `CLIENT_ORIGIN` stops the server at start
   "data": {
     "status": "ok",
     "environment": "development",
+    "database": { "status": "connected", "name": "brickpro" },
     "uptimeSeconds": 12,
     "timestamp": "2026-11-01T03:30:00.000Z"
   }
 }
 ```
 
-It checks that the process is running. It does not check the database (not connected yet).
+It pings the database. If the database is not connected (or does not answer), the response is `503` with `success: false`, `data.status: "degraded"` and `data.database.status` set to `disconnected`, `connecting`, `disconnecting` or `unreachable`.
 
 ### Errors
 
@@ -83,7 +93,7 @@ Browsers calling from a `CLIENT_ORIGIN` get CORS headers. A browser on any other
 
 ## Shutdown
 
-`SIGINT` / `SIGTERM` stop new connections, let running requests finish, then exit. If connections stay open for 10 seconds the process exits anyway. An uncaught error also shuts the server down with a non-zero exit code.
+`SIGINT` / `SIGTERM` stop new connections, let running requests finish, close the database connection, then exit. If connections stay open for 10 seconds the process exits anyway. An uncaught error also shuts the server down with a non-zero exit code.
 
 ## Structure
 
@@ -92,9 +102,11 @@ server/
   app.js                 Express app (createApp), no listening
   server.js              Starts the app, graceful shutdown
   config/env.js          Environment loading and validation
+  config/db.js           MongoDB connection, status, readable errors
   middlewares/           error + 404 (auth, role, validation stubs are still empty)
   routes/health.routes.js
-  utils/                 ApiError, asyncHandler, apiResponse
+  utils/                 ApiError, asyncHandler, apiResponse,
+                         money (integer paise), dates (business dates, IST), schema (Mongoose helpers)
   tests/
 ```
 
