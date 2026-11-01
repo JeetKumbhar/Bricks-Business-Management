@@ -31,14 +31,14 @@ export default function TypeBalances({ money, className }) {
                     <p className="text-base font-bold">{formatCurrency(t.outstanding)}</p>
                   </div>
                 </div>
-                <dl className="mt-2 grid grid-cols-2 gap-x-4 text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <dt className="text-fg-muted">{meta.earningsLabel}</dt>
-                    <dd className="font-medium">{formatCurrency(t.earned)}</dd>
+                <dl className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-lg bg-secondary-soft/60 px-3 py-2">
+                    <dt className="text-xs text-fg-muted">{meta.earningsLabel}</dt>
+                    <dd className="mt-0.5 font-semibold">{formatCurrency(t.earned)}</dd>
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <dt className="text-fg-muted">Received</dt>
-                    <dd className="font-medium">{formatCurrency(t.received)}</dd>
+                  <div className="rounded-lg bg-secondary-soft/60 px-3 py-2">
+                    <dt className="text-xs text-fg-muted">Received</dt>
+                    <dd className="mt-0.5 font-semibold">{formatCurrency(t.received)}</dd>
                   </div>
                 </dl>
                 {t.overpaidCount > 0 && (
