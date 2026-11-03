@@ -13,6 +13,7 @@ const matchValue = (actual, cond) => {
   if (cond && typeof cond === "object") {
     if ("$in" in cond) return cond.$in.includes(actual);
     if ("$ne" in cond) return String(actual) !== String(cond.$ne);
+    if ("$gte" in cond || "$lte" in cond) return typeof actual === "string" && (!("$gte" in cond) || actual >= cond.$gte) && (!("$lte" in cond) || actual <= cond.$lte);
     throw new Error(`memoryDb: unsupported operator ${JSON.stringify(cond)}`);
   }
   return actual === cond;
@@ -61,11 +62,14 @@ const raw = (doc) => doc.toObject({ transform: false });
 export const db = {
   labours: new Map(),
   rates: [],
+  attendance: new Map(), // key "labourId|date"
   counters: {},
   failNextRateCreate: false,
   reset() {
     this.labours.clear();
     this.rates.length = 0;
+    this.attendance.clear();
+    this.failNextAttendanceWrite = null;
     this.counters = {};
     this.failNextRateCreate = false;
   },
@@ -149,3 +153,42 @@ export const makeRateModel = (Real) => ({
     if (row) Object.assign(row, $set);
   },
 });
+
+/**
+ * In-memory Attendance collection: the unique (labourId, date) index, upsert with $setOnInsert, and the $set / $inc / $push
+ * updates the attendance service uses. `db.beforeAttendanceUpdate` lets a test change data between the service's read and write.
+ */
+export const makeAttendanceModel = () => {
+  let seq = 0;
+  const keyOf = (r) => `${r.labourId}|${r.date}`;
+  const rows = () => [...db.attendance.values()];
+  return {
+    find(filter) {
+      return new Query(rows().filter((r) => matches(r, filter)).map(clone));
+    },
+    async countDocuments(filter) {
+      return rows().filter((r) => matches(r, filter)).length;
+    },
+    async updateOne(filter, update, options = {}) {
+      if (db.failNextAttendanceWrite === "duplicate") {
+        db.failNextAttendanceWrite = null;
+        throw duplicate({ labourId: 1, date: 1 });
+      }
+      db.beforeAttendanceUpdate?.(filter);
+      const found = rows().find((r) => matches(r, filter));
+      const now = new Date();
+      if (!found) {
+        if (!options.upsert) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+        const row = { _id: `att-${(seq += 1)}`, ...clone(update.$setOnInsert ?? {}), createdAt: now, updatedAt: now };
+        if (db.attendance.has(keyOf(row))) throw duplicate({ labourId: 1, date: 1 });
+        db.attendance.set(keyOf(row), row);
+        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+      }
+      Object.assign(found, clone(update.$set ?? {}));
+      for (const [k, by] of Object.entries(update.$inc ?? {})) found[k] = (found[k] ?? 0) + by;
+      for (const [k, v] of Object.entries(update.$push ?? {})) found[k] = [...(found[k] ?? []), clone(v)];
+      found.updatedAt = now;
+      return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
+    },
+  };
+};
