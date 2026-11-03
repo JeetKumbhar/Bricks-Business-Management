@@ -16,6 +16,7 @@ function TruckForm({ truck, drivers, allLabours, isTruckNumberTaken, onSubmit })
     resolver: zodResolver(truckSchema),
     defaultValues: {
       truckNumber: truck?.truckNumber ?? "",
+      nickname: truck?.nickname ?? "",
       model: truck?.model ?? "",
       capacity: truck?.capacity ? String(truck.capacity) : "",
       driverId: truck?.driverId ?? "",
@@ -47,6 +48,7 @@ function TruckForm({ truck, drivers, allLabours, isTruckNumberTaken, onSubmit })
         error={errors.truckNumber?.message}
         {...register("truckNumber")}
       />
+      <Input label="Nickname" placeholder="Optional, e.g. Red Tata" error={errors.nickname?.message} {...register("nickname")} />
       <Input label="Model / Type" placeholder="e.g. Tata 407" error={errors.model?.message} {...register("model")} />
       <Input
         label="Capacity (tons)"

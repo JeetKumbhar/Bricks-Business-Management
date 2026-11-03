@@ -13,6 +13,7 @@ import Reports from "../pages/Reports";
 import Salary from "../pages/Salary";
 import Settings from "../pages/Settings";
 import Trucks from "../pages/Trucks";
+import TruckDetail from "../pages/TruckDetail";
 import PatlavaleProduction from "../pages/PatlavaleProduction";
 
 /*
@@ -60,6 +61,7 @@ export default function AppRoutes() {
         <Route path="patlavale-production" element={<PatlavaleProduction />} />
         <Route path="salary" element={<Salary />} />
         <Route path="trucks" element={<Trucks />} />
+        <Route path="trucks/:id" element={<TruckDetail />} />
         <Route path="reports" element={<Reports />} />
         <Route path="settings" element={<Settings />} />
       </Route>

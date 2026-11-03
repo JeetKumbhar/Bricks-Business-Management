@@ -2,6 +2,7 @@ import { BrowserRouter } from "react-router-dom";
 import { ToastProvider } from "./components/ui";
 import { LabourProvider } from "./context/LabourContext";
 import { TruckProvider } from "./context/TruckContext";
+import { TruckTripProvider } from "./context/TruckTripContext";
 import IntroAnimation from "./components/common/IntroAnimation";
 import AppRoutes from "./routes/AppRoutes";
 
@@ -12,7 +13,9 @@ export default function App() {
         <ToastProvider>
           <LabourProvider>
             <TruckProvider>
-              <AppRoutes />
+              <TruckTripProvider>
+                <AppRoutes />
+              </TruckTripProvider>
             </TruckProvider>
           </LabourProvider>
         </ToastProvider>

@@ -6,12 +6,16 @@ const newId = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().
 
 export const normalizeTruckNumber = (value) => String(value ?? "").trim().toUpperCase();
 
+/** Registration numbers are compared without spaces / hyphens, so "MH-04 AB 1234" and "MH04AB1234" are the same truck. */
+export const truckNumberKey = (value) => normalizeTruckNumber(value).replace(/[^A-Z0-9]/g, "");
+
 /** A new truck starts as Working, with a "Truck added" history entry. */
-export const createTruck = ({ truckNumber, model = "", capacity = null, driverId = null }, { changedBy, now = new Date() }) => {
+export const createTruck = ({ truckNumber, nickname = "", model = "", capacity = null, driverId = null }, { changedBy, now = new Date() }) => {
   const iso = now.toISOString();
   const truck = {
     id: newId("truck"),
     truckNumber: normalizeTruckNumber(truckNumber),
+    nickname: String(nickname ?? "").trim(),
     model: model.trim(),
     capacity,
     driverId: driverId || null,

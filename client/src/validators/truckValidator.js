@@ -12,6 +12,7 @@ const optionalAmount = (label) =>
 /** Add / edit truck. Truck number must be unique (checked by the form, which knows the other trucks). */
 export const truckSchema = z.object({
   truckNumber: z.string().trim().min(3, "Truck number is required").max(20, "Truck number is too long"),
+  nickname: z.string().trim().max(40, "Nickname is too long"),
   model: z.string().trim().max(60, "Model is too long"),
   capacity: z
     .string()

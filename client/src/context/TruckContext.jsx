@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { applyDriverChange, applyStatusChange, createServiceRecord, createTruck, normalizeTruckNumber } from "../features/trucks/truckOps";
+import { applyDriverChange, applyStatusChange, createServiceRecord, createTruck, normalizeTruckNumber, truckNumberKey } from "../features/trucks/truckOps";
 import { initialMaintenance, initialTruckHistory, initialTrucks } from "../mock/trucks";
 import { toISODate } from "../utils/formatDate";
 
@@ -19,7 +19,7 @@ export function TruckProvider({ children }) {
   const [maintenance, setMaintenance] = useState(initialMaintenance);
 
   const isTruckNumberTaken = useCallback(
-    (number, excludeId) => trucks.some((t) => t.id !== excludeId && t.truckNumber === normalizeTruckNumber(number)),
+    (number, excludeId) => trucks.some((t) => t.id !== excludeId && truckNumberKey(t.truckNumber) === truckNumberKey(number)),
     [trucks]
   );
 
@@ -38,6 +38,7 @@ export function TruckProvider({ children }) {
       const next = {
         ...current,
         truckNumber: normalizeTruckNumber(changes.truckNumber ?? current.truckNumber),
+        nickname: changes.nickname === undefined ? (current.nickname ?? "") : String(changes.nickname).trim(),
         model: (changes.model ?? current.model).trim(),
         capacity: changes.capacity === undefined ? current.capacity : changes.capacity,
       };

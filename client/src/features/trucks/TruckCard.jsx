@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
-import { History, Pencil, RefreshCw, Truck as TruckIcon, UserRound } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { History, ListChecks, Pencil, RefreshCw, Truck as TruckIcon, UserRound } from "lucide-react";
 import { Badge, Button, Card, Dropdown } from "../../components/ui";
 import { formatDate } from "../../utils/formatDate";
 import { STOP_REASON_LABELS, TRUCK_STATUS, TRUCK_STATUS_META } from "../../utils/truckStatus";
@@ -17,6 +17,7 @@ const statusLine = (t) => {
 /** One truck: number, model, driver, current status (with the stop reason), and its actions. */
 export default function TruckCard({ truck, onUpdateStatus, onDetails, onEdit }) {
   const meta = TRUCK_STATUS_META[truck.status];
+  const navigate = useNavigate();
 
   return (
     <Card className="flex flex-col gap-3 p-4">
@@ -26,7 +27,12 @@ export default function TruckCard({ truck, onUpdateStatus, onDetails, onEdit }) 
             <TruckIcon className="h-5 w-5" aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <p className="truncate text-lg font-bold">{truck.truckNumber}</p>
+            <p className="truncate text-lg font-bold">
+              <Link to={`/trucks/${truck.id}`} className="hover:underline" aria-label={`Open ${truck.truckNumber} trips and details`}>
+                {truck.truckNumber}
+              </Link>
+              {truck.nickname ? <span className="ml-2 text-sm font-medium text-fg-muted">{truck.nickname}</span> : null}
+            </p>
             <p className="type-small truncate">
               {truck.model || "Model not set"}
               {truck.capacity ? ` - ${truck.capacity} ton` : ""}
@@ -59,7 +65,10 @@ export default function TruckCard({ truck, onUpdateStatus, onDetails, onEdit }) 
         <Dropdown
           ariaLabel={`More actions for ${truck.truckNumber}`}
           triggerClassName="h-11 w-11 border border-border sm:h-10 sm:w-10"
-          items={[{ label: "Edit truck", icon: Pencil, onClick: () => onEdit(truck) }]}
+          items={[
+            { label: "Trips and details", icon: ListChecks, onClick: () => navigate(`/trucks/${truck.id}`) },
+            { label: "Edit truck", icon: Pencil, onClick: () => onEdit(truck) },
+          ]}
         />
       </div>
     </Card>
