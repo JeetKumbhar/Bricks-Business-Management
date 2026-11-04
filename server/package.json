@@ -12,7 +12,12 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "vitest run",
-    "create-owner": "node scripts/createOwner.js"
+    "test:phase1": "vitest run tests/app.test.js",
+    "test:phase2": "vitest run tests/db.test.js tests/env.test.js tests/money.test.js tests/dates.test.js tests/schema.test.js",
+    "test:phase3": "vitest run tests/auth.test.js tests/authCookie.test.js tests/user.model.test.js",
+    "test:phase4": "vitest run tests/labour.test.js",
+    "test:phase5": "vitest run tests/attendance.test.js",
+    "test:phase6": "vitest run tests/maapEntry.test.js",
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

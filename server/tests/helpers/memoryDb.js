@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 // A small in-memory stand-in for the labour collections, so the service and routes can be tested without MongoDB.
 // It wraps the REAL Mongoose models for validation, defaults and trimming (validateSync / hydrate), and imitates only
 // what the labour service uses: unique indexes (as E11000), simple filters ($and, $or, $in, $ne, RegExp) and sort/skip/limit.
@@ -63,12 +64,16 @@ export const db = {
   labours: new Map(),
   rates: [],
   attendance: new Map(), // key "labourId|date"
+  maap: new Map(), // key = _id
   counters: {},
   failNextRateCreate: false,
   reset() {
     this.labours.clear();
     this.rates.length = 0;
     this.attendance.clear();
+    this.maap.clear();
+    this.beforeMaapUpdate = null;
+    this.failNextMaapWrite = null;
     this.failNextAttendanceWrite = null;
     this.counters = {};
     this.failNextRateCreate = false;
@@ -188,6 +193,46 @@ export const makeAttendanceModel = () => {
       for (const [k, by] of Object.entries(update.$inc ?? {})) found[k] = (found[k] ?? 0) + by;
       for (const [k, v] of Object.entries(update.$push ?? {})) found[k] = [...(found[k] ?? []), clone(v)];
       found.updatedAt = now;
+      return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
+    },
+  };
+};
+
+/**
+ * In-memory MaapEntry collection: the partial unique index (one LIVE entry per labourId + date), upsert with $setOnInsert,
+ * and the $set / $inc / $push updates the Maapvali service uses. `db.beforeMaapUpdate` lets a test change data between the
+ * service's read and its write.
+ */
+export const makeMaapEntryModel = () => {
+  const rows = () => [...db.maap.values()];
+  const liveClash = (row) => rows().some((r) => r._id !== row._id && !r.isDeleted && !row.isDeleted && r.labourId === row.labourId && r.date === row.date);
+  return {
+    find(filter) {
+      return new Query(rows().filter((r) => matches(r, filter)).map(clone));
+    },
+    async countDocuments(filter) {
+      return rows().filter((r) => matches(r, filter)).length;
+    },
+    async updateOne(filter, update, options = {}) {
+      if (db.failNextMaapWrite === "duplicate") {
+        db.failNextMaapWrite = null;
+        throw duplicate({ labourId: 1, date: 1 });
+      }
+      db.beforeMaapUpdate?.(filter);
+      const found = rows().find((r) => matches(r, filter));
+      const now = new Date();
+      if (!found) {
+        if (!options.upsert) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+        const row = { _id: new mongoose.Types.ObjectId().toString(), ...clone(update.$setOnInsert ?? {}), createdAt: now, updatedAt: now };
+        if (liveClash(row)) throw duplicate({ labourId: 1, date: 1 });
+        db.maap.set(row._id, row);
+        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+      }
+      const next = { ...found, ...clone(update.$set ?? {}) };
+      for (const [k, by] of Object.entries(update.$inc ?? {})) next[k] = (next[k] ?? 0) + by;
+      for (const [k, v] of Object.entries(update.$push ?? {})) next[k] = [...(next[k] ?? []), clone(v)];
+      if (liveClash(next)) throw duplicate({ labourId: 1, date: 1 });
+      Object.assign(found, next, { updatedAt: now });
       return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
     },
   };

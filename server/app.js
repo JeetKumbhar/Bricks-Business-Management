@@ -12,6 +12,7 @@ import { createAuthRouter } from "./routes/auth.routes.js";
 import healthRoutes from "./routes/health.routes.js";
 import attendanceRoutes, { labourAttendanceRouter } from "./routes/attendance.routes.js";
 import labourRoutes from "./routes/labour.routes.js";
+import maapEntryRoutes, { labourMaapRouter } from "./routes/maapEntry.routes.js";
 
 // Built as a function so tests can create a fresh app. Nothing here listens on a port (see server.js).
 // options.loginRateLimit lets tests use a small limit; production uses the defaults.
@@ -50,8 +51,10 @@ export function createApp({ loginRateLimit } = {}) {
   app.use("/api", requireAuth);
   // Business routers are mounted here, one phase at a time.
   app.use("/api/labours/:id/attendance", labourAttendanceRouter); // before /api/labours so it is matched first
+  app.use("/api/labours/:id/maap-entries", labourMaapRouter);
   app.use("/api/labours", labourRoutes);
   app.use("/api/attendance", attendanceRoutes);
+  app.use("/api/maap-entries", maapEntryRoutes);
 
   app.use(notFound);
   app.use(errorHandler);
