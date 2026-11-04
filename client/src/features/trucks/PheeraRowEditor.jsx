@@ -1,12 +1,14 @@
 import { Trash2 } from "lucide-react";
 import { Badge, Button, Card, CardBody, Input, Select } from "../../components/ui";
-import { MATERIALS, quantityRule, unitForMaterial } from "../../utils/materials";
+import { CUSTOM_MATERIAL_MAX, MATERIAL_CHOICES, OTHER, quantityRule, unitForMaterial } from "../../utils/materials";
 
 export const DESTINATION_LIST_ID = "pheera-entry-destinations";
+export const MATERIAL_LIST_ID = "pheera-entry-materials";
 
 /**
- * One Pheera in the entry form. Bricks ask for "Number of Bricks" (whole numbers); every other material asks for
- * "Weight (Tonnes)". `errors` only has messages after the first save attempt.
+ * One Pheera in the entry form. Material is Bricks, Soil or Other. Bricks ask for "Number of Bricks" (whole numbers);
+ * Soil and Other ask for "Weight (Tonnes)". Other also asks for the real material name, which is what gets saved.
+ * `errors` only has messages after the first save attempt.
  */
 export default function PheeraRowEditor({ title, draft, errors = {}, duplicateHint, onChange, onRemove }) {
   const rule = draft.material ? quantityRule(draft.material) : null;
@@ -36,9 +38,10 @@ export default function PheeraRowEditor({ title, draft, errors = {}, duplicateHi
             onChange={(e) => {
               const material = e.target.value;
               const unitChanged = draft.material && material && unitForMaterial(draft.material) !== unitForMaterial(material);
-              onChange(unitChanged ? { material, quantity: "" } : { material });
+              // a typed name only belongs to "Other"
+              onChange({ material, ...(unitChanged ? { quantity: "" } : {}), ...(material !== OTHER ? { customMaterial: "" } : {}) });
             }}
-            options={MATERIALS.map((m) => ({ value: m, label: m }))}
+            options={MATERIAL_CHOICES.map((m) => ({ value: m, label: m }))}
             error={errors.material}
           />
           <Input
@@ -64,6 +67,21 @@ export default function PheeraRowEditor({ title, draft, errors = {}, duplicateHi
           />
           <Input label="Remarks" placeholder="Optional" value={draft.remarks} onChange={(e) => onChange({ remarks: e.target.value })} error={errors.remarks} />
         </div>
+
+        {draft.material === OTHER && (
+          <Input
+            label="Material Type"
+            required
+            list={MATERIAL_LIST_ID}
+            autoComplete="off"
+            maxLength={CUSTOM_MATERIAL_MAX}
+            placeholder="Enter material name, e.g. Stone Dust"
+            value={draft.customMaterial ?? ""}
+            onChange={(e) => onChange({ customMaterial: e.target.value })}
+            error={errors.customMaterial}
+            wrapperClassName="sm:max-w-sm"
+          />
+        )}
 
         {duplicateHint && <p className="text-xs text-warning">{duplicateHint}</p>}
       </CardBody>

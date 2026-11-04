@@ -6,7 +6,7 @@ import { todayBusinessDate } from "../../utils/businessDate";
 import { formatDate } from "../../utils/formatDate";
 import { formatQuantity, UNITS } from "../../utils/materials";
 import { emptyFilters, presetRange } from "./pheeraFilterPresets";
-import { dailySummaries, filterPheeras, paginate, sortPheeras, summarizePheeras } from "./pheeraSelectors";
+import { dailySummaries, filterPheeras, materialFilterOptions, paginate, sortPheeras, summarizePheeras } from "./pheeraSelectors";
 import PheeraFilters from "./PheeraFilters";
 import PheeraSummaryTiles from "./PheeraSummaryTiles";
 import PheeraTable from "./PheeraTable";
@@ -59,7 +59,7 @@ export default function PheeraHistoryPanel({ lockedTruckId = null }) {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      <PheeraFilters filters={filters} onChange={changeFilters} trucks={trucks} destinations={destinations} today={today} hideTruck={Boolean(lockedTruckId)} />
+      <PheeraFilters filters={filters} onChange={changeFilters} trucks={trucks} destinations={destinations} materials={materialFilterOptions(rows)} today={today} hideTruck={Boolean(lockedTruckId)} />
 
       <PheeraSummaryTiles summary={summary} heading="Totals for the filters above" />
 

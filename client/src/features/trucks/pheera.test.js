@@ -1,11 +1,11 @@
 // Tests for Pheera (truck trips): quantity rules, validation, numbering, totals, reports, service.
 // Run with Vitest: npx vitest run src/features/trucks
 import { describe, expect, it } from "vitest";
-import { formatQuantity, parseQuantity } from "../../utils/materials";
+import { formatQuantity, materialChoiceOf, matchKnownMaterial, parseQuantity } from "../../utils/materials";
 import { isBusinessDate, todayBusinessDate } from "../../utils/businessDate";
-import { validateBatch, validatePheeraDraft } from "../../validators/pheeraValidator";
+import { resolveMaterialName, validateBatch, validatePheeraDraft } from "../../validators/pheeraValidator";
 import { buildPheeraRecords, markPheeraDeleted, nextPheeraNumber, numberingGaps } from "./pheeraOps";
-import { dailySummaries, decoratePheeras, filterPheeras, paginate, sortPheeras, summarizePheeras } from "./pheeraSelectors";
+import { dailySummaries, decoratePheeras, filterPheeras, knownMaterials, materialFilterOptions, paginate, sortPheeras, summarizePheeras } from "./pheeraSelectors";
 import { buildReport, csvSafe, reportToMatrix } from "./truckReports";
 import { createTruckTripService } from "../../services/truckTripService";
 import { initialPheeras } from "../../mock/truckTrips";
@@ -16,7 +16,7 @@ const trucks = [
   { id: "t2", truckNumber: "TRK-02", nickname: "" },
 ];
 const TODAY = "2026-11-02";
-const draft = (o = {}) => ({ material: "Bricks", destination: "Palghar", quantity: "1500", remarks: "", ...o });
+const draft = (o = {}) => ({ material: "Bricks", customMaterial: "", destination: "Palghar", quantity: "1500", remarks: "", ...o });
 const rec = (o) => ({
   id: Math.random().toString(36), businessDate: "2026-11-01", truckId: "t1", truckRegistration: "TRK-01", pheeraNumber: 1,
   material: "Bricks", destination: "Palghar", quantity: 1000, unit: "bricks", remarks: "", isDeleted: false, ...o,
@@ -28,14 +28,14 @@ describe("quantity rules", () => {
     for (const bad of ["", "0", "10.5", "-5", "1e3", "abc", "1,500", " "]) expect(parseQuantity("Bricks", bad).ok).toBe(false);
   });
   it("tonnes: positive, max 2 decimals", () => {
-    expect(parseQuantity("Sand", "4.5")).toEqual({ ok: true, value: 4.5 });
-    expect(parseQuantity("Sand", ".5").value).toBe(0.5);
-    expect(parseQuantity("Sand", "5.").value).toBe(5);
-    for (const bad of ["", "0", "0.00", "4.555", "-1", "x", "1e2"]) expect(parseQuantity("Sand", bad).ok).toBe(false);
+    expect(parseQuantity("Soil", "4.5")).toEqual({ ok: true, value: 4.5 });
+    expect(parseQuantity("Soil", ".5").value).toBe(0.5);
+    expect(parseQuantity("Soil", "5.").value).toBe(5);
+    for (const bad of ["", "0", "0.00", "4.555", "-1", "x", "1e2"]) expect(parseQuantity("Soil", bad).ok).toBe(false);
   });
   it("rejects absurd amounts per Pheera", () => {
     expect(parseQuantity("Bricks", "100001").ok).toBe(false);
-    expect(parseQuantity("Cement", "101").ok).toBe(false);
+    expect(parseQuantity("Stone Dust", "101").ok).toBe(false);
   });
   it("formats quantities", () => {
     expect(formatQuantity(1500, "bricks")).toBe("1,500");
@@ -65,12 +65,12 @@ describe("validation", () => {
     expect(value).toEqual({ material: "Bricks", destination: "Manor East", quantity: 1500, unit: "bricks", remarks: "" });
   });
   it("flags every problem on a blank row", () => {
-    const { errors, value } = validatePheeraDraft({ material: "", destination: "", quantity: "", remarks: "" });
+    const { errors, value } = validatePheeraDraft({ material: "", customMaterial: "", destination: "", quantity: "", remarks: "" });
     expect(value).toBeNull();
     expect(Object.keys(errors).sort()).toEqual(["destination", "material", "quantity"]);
   });
   it("unit follows the material", () => {
-    expect(validatePheeraDraft(draft({ material: "Sand", quantity: "4.5" })).value.unit).toBe("tonnes");
+    expect(validatePheeraDraft(draft({ material: "Soil", quantity: "4.5" })).value.unit).toBe("tonnes");
   });
   it("batch: needs rows, a past/today date and a known truck", () => {
     const ok = { businessDate: TODAY, truckId: "t1", today: TODAY, trucks, drafts: [draft()] };
@@ -207,7 +207,7 @@ describe("reports", () => {
 });
 
 describe("service", () => {
-  const input = (o = {}) => ({ batchId: "b1", businessDate: TODAY, truckId: "t1", drafts: [draft(), draft({ material: "Sand", quantity: "4.5" })], trucks, today: TODAY, ...o });
+  const input = (o = {}) => ({ batchId: "b1", businessDate: TODAY, truckId: "t1", drafts: [draft(), draft({ material: "Soil", quantity: "4.5" })], trucks, today: TODAY, ...o });
   it("saves a batch with server-side numbers", async () => {
     const svc = createTruckTripService([]);
     const { records, duplicate } = await svc.savePheeraBatch(input());
@@ -241,6 +241,105 @@ describe("service", () => {
   });
 });
 
+describe("materials: Bricks, Soil, Other", () => {
+  const row = (o) => validatePheeraDraft(draft(o));
+  it("Bricks: Number of Bricks, whole numbers only", () => {
+    expect(row({ material: "Bricks", quantity: "1500" }).value).toEqual({ material: "Bricks", destination: "Palghar", quantity: 1500, unit: "bricks", remarks: "" });
+    expect(row({ material: "Bricks", quantity: "10.5" }).errors.quantity).toBeTruthy();
+  });
+  it("Soil: tonnes, decimals allowed", () => {
+    const { value } = row({ material: "Soil", quantity: "4.5" });
+    expect(value.material).toBe("Soil");
+    expect(value.unit).toBe("tonnes");
+    expect(value.quantity).toBe(4.5);
+  });
+  it("Other: the typed name is saved, trimmed, in tonnes", () => {
+    const { value, errors } = row({ material: "Other", customMaterial: "   Stone   Dust ", quantity: "3.25" });
+    expect(errors).toEqual({});
+    expect(value.material).toBe("Stone Dust"); // never just "Other"
+    expect(value.unit).toBe("tonnes");
+    expect(value.quantity).toBe(3.25);
+  });
+  it("Other: a name is required, and it cannot be Bricks / Soil / Other", () => {
+    expect(row({ material: "Other", customMaterial: "", quantity: "3" }).errors.customMaterial).toBeTruthy();
+    expect(row({ material: "Other", customMaterial: "    ", quantity: "3" }).errors.customMaterial).toBeTruthy();
+    expect(row({ material: "Other", customMaterial: "bricks", quantity: "3" }).errors.customMaterial).toMatch(/Bricks/);
+    expect(row({ material: "Other", customMaterial: "SOIL", quantity: "3" }).errors.customMaterial).toMatch(/Soil/);
+    expect(row({ material: "Other", customMaterial: "other", quantity: "3" }).errors.customMaterial).toMatch(/not Other/);
+    expect(row({ material: "Other", customMaterial: "x".repeat(41), quantity: "3" }).errors.customMaterial).toMatch(/too long/);
+  });
+  it("only Bricks, Soil and Other can be chosen (no Sand / Cement / Stone for new entries)", () => {
+    for (const old of ["Sand", "Cement", "Stone", ""]) expect(row({ material: old }).errors.material).toBeTruthy();
+  });
+  it("Other is always checked as tonnes, even before / without a valid name", () => {
+    const r = row({ material: "Other", customMaterial: "", quantity: "3.5" });
+    expect(r.errors.quantity).toBeUndefined();          // only the missing name is reported
+    expect(r.errors.customMaterial).toBeTruthy();
+    expect(row({ material: "Other", customMaterial: "Bricks", quantity: "3.5" }).errors.quantity).toBeUndefined();
+    expect(row({ material: "Other", customMaterial: "Gravel", quantity: "3.555" }).errors.quantity).toBeTruthy();
+  });
+  it("a name typed under another choice is ignored", () => {
+    expect(resolveMaterialName({ material: "Soil", customMaterial: "Stone Dust" })).toBe("Soil");
+    expect(resolveMaterialName({ material: "Other", customMaterial: " Fly Ash " })).toBe("Fly Ash");
+    expect(resolveMaterialName({ material: "", customMaterial: "x" })).toBe("");
+  });
+  it("maps a saved name back to the dropdown (for restoring a record)", () => {
+    expect(materialChoiceOf("Bricks")).toBe("Bricks");
+    expect(materialChoiceOf("Soil")).toBe("Soil");
+    expect(materialChoiceOf("Stone Dust")).toBe("Other");
+    expect(materialChoiceOf("Sand")).toBe("Other"); // older record
+  });
+  it("reuses an existing spelling that differs only by capitals", () => {
+    expect(matchKnownMaterial("stone dust", ["Fly Ash", "Stone Dust"])).toBe("Stone Dust");
+    expect(matchKnownMaterial("Gravel", ["Stone Dust"])).toBe("Gravel");
+  });
+  it("saves the real name and unit through the service, whole batch", async () => {
+    const svc = createTruckTripService([]);
+    const { records } = await svc.savePheeraBatch({
+      batchId: "m1", businessDate: TODAY, truckId: "t1", trucks, today: TODAY,
+      drafts: [draft({ material: "Other", customMaterial: " Stone Dust ", quantity: "4" }), draft({ material: "Soil", quantity: "5.5" }), draft()],
+    });
+    expect(records.map((r) => [r.material, r.unit, r.quantity])).toEqual([["Stone Dust", "tonnes", 4], ["Soil", "tonnes", 5.5], ["Bricks", "bricks", 1500]]);
+  });
+  const data = decoratePheeras(
+    [
+      rec({ id: "b1", material: "Bricks", quantity: 1000 }),
+      rec({ id: "s1", material: "Soil", unit: "tonnes", quantity: 4 }),
+      rec({ id: "d1", material: "Stone Dust", unit: "tonnes", quantity: 3 }),
+      rec({ id: "d2", material: "Stone Dust", unit: "tonnes", quantity: 2.5 }),
+      rec({ id: "f1", material: "Fly Ash", unit: "tonnes", quantity: 2 }),
+      rec({ id: "o1", material: "Sand", unit: "tonnes", quantity: 6 }), // older record, kept as saved
+    ],
+    trucks
+  );
+  it("filters list Bricks and Soil first, then every other saved name", () => {
+    expect(knownMaterials(data)).toEqual(["Stone Dust", "Fly Ash", "Sand"]);
+    expect(materialFilterOptions(data).slice(0, 2)).toEqual(["Bricks", "Soil"]);
+  });
+  it("filters and searches by the actual custom name", () => {
+    expect(filterPheeras(data, { material: "Stone Dust" }).map((r) => r.id)).toEqual(["d1", "d2"]);
+    expect(filterPheeras(data, { material: "stone dust" })).toHaveLength(2);
+    expect(filterPheeras(data, { search: "fly" }).map((r) => r.id)).toEqual(["f1"]);
+    expect(filterPheeras(data, { material: "Other" })).toHaveLength(0); // "Other" is never a saved name
+  });
+  it("material-wise report keeps every custom material separate, in its own unit", () => {
+    const m = buildReport({ rows: data, trucks, params: { type: "material", from: "2026-11-01", to: "2026-11-01" } });
+    expect(m.sections.map((s) => s.heading).sort()).toEqual(["Material: Bricks", "Material: Fly Ash", "Material: Sand", "Material: Soil", "Material: Stone Dust"]);
+    const byName = Object.fromEntries(m.sections.map((s) => [s.heading, s.totals]));
+    expect(byName["Material: Stone Dust"]).toEqual([{ unit: "tonnes", count: 2, quantity: 5.5 }]);
+    expect(byName["Material: Fly Ash"]).toEqual([{ unit: "tonnes", count: 1, quantity: 2 }]);
+    expect(byName["Material: Bricks"]).toEqual([{ unit: "bricks", count: 1, quantity: 1000 }]);
+    expect(m.sections.some((s) => s.heading === "Material: Other")).toBe(false);
+    expect(m.grand.totals).toEqual([{ unit: "bricks", count: 1, quantity: 1000 }, { unit: "tonnes", count: 5, quantity: 17.5 }]);
+  });
+  it("exports show the custom name, not Other", () => {
+    const m = buildReport({ rows: data, trucks, params: { type: "range", from: "2026-11-01", to: "2026-11-01" } });
+    const names = reportToMatrix(m).rows.filter((_, i) => reportToMatrix(m).kinds[i] === "data").map((r) => r[3]);
+    expect(names).toContain("Stone Dust");
+    expect(names).not.toContain("Other");
+  });
+});
+
 describe("demo data", () => {
   it("is valid and consistent", () => {
     expect(initialPheeras.length).toBeGreaterThan(50);
@@ -251,8 +350,15 @@ describe("demo data", () => {
       expect(truckIds.has(r.truckId)).toBe(true);
       expect(isBusinessDate(r.businessDate)).toBe(true);
       expect(r.businessDate <= todayBusinessDate()).toBe(true);
-      expect(validatePheeraDraft({ material: r.material, destination: r.destination, quantity: String(r.quantity), remarks: r.remarks }).value).toBeTruthy();
+      // restoring a saved record into the form (dropdown choice + typed name) gives back the same material, quantity and unit
+      const choice = materialChoiceOf(r.material);
+      const back = validatePheeraDraft({ material: choice, customMaterial: choice === "Other" ? r.material : "", destination: r.destination, quantity: String(r.quantity), remarks: r.remarks }).value;
+      expect([back.material, back.quantity, back.unit]).toEqual([r.material, r.quantity, r.unit]);
     }
+    // Bricks, Soil and at least one typed material (no Sand / Cement / Stone any more)
+    const names = new Set(initialPheeras.map((r) => r.material));
+    expect(names.has("Bricks") && names.has("Soil") && names.has("Stone Dust")).toBe(true);
+    for (const old of ["Sand", "Cement", "Stone", "Other"]) expect(names.has(old)).toBe(false);
     // numbers are unique per truck + date
     const keys = initialPheeras.map((r) => `${r.truckId}|${r.businessDate}|${r.pheeraNumber}`);
     expect(new Set(keys).size).toBe(keys.length);

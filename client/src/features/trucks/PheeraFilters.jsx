@@ -1,12 +1,12 @@
 import { Card, CardBody, DatePicker, Input, SearchInput, Select, Tabs } from "../../components/ui";
-import { MATERIALS } from "../../utils/materials";
 import { DATE_PRESETS, detectPreset, presetRange } from "./pheeraFilterPresets";
 
 /**
+ * `materials` = the names the material filter offers (Bricks, Soil and every other saved name, see materialFilterOptions).
  * Filters for Pheera lists: quick date ranges, from / to, truck, material, destination, and a search box
  * (registration number, nickname, destination, remarks). Controlled: `filters` and `onChange(nextFilters)`.
  */
-export default function PheeraFilters({ filters, onChange, trucks, destinations, today, hideTruck = false }) {
+export default function PheeraFilters({ filters, onChange, trucks, destinations, materials, today, hideTruck = false }) {
   const set = (patch) => onChange({ ...filters, ...patch });
   const preset = detectPreset(filters.from, filters.to, today);
   const rangeError = filters.from && filters.to && filters.to < filters.from ? "The end date is before the start date." : null;
@@ -33,7 +33,7 @@ export default function PheeraFilters({ filters, onChange, trucks, destinations,
             placeholder="All materials"
             value={filters.material}
             onChange={(e) => set({ material: e.target.value })}
-            options={MATERIALS.map((m) => ({ value: m, label: m }))}
+            options={materials.map((m) => ({ value: m, label: m }))}
           />
           <Input
             label="Destination"

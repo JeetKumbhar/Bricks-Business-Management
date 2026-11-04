@@ -1,21 +1,29 @@
 import { useNavigate } from "react-router-dom";
-import { Banknote, Boxes, Factory, Layers, UserCheck, Wallet } from "lucide-react";
+import { Banknote, Boxes, Factory, Layers, Truck, UserCheck, Wallet } from "lucide-react";
 import { StatCard } from "../../components/ui";
+import { todayBusinessDate } from "../../utils/businessDate";
 import { formatCurrency, formatNumber } from "../../utils/formatCurrency";
+import { filterPheeras } from "../trucks/pheeraSelectors";
+import useTruckTrips from "../trucks/useTruckTrips";
 
 /**
- * The six dashboard summary cards, in priority order: operations (attendance, maaps), production, then money.
+ * The dashboard cards, in priority order. First row (shortcut cards): attendance, maaps, Patlavale production and Truck Pheera
+ * entry. Second row: total bricks, then money.
  * Every value comes from the same records as the other pages (see dashboardSelectors.js); nothing is typed in by hand.
  * - Bigari Present counts status PRESENT only (half days are not counted). Attendance is Bigari only.
  * - Production Today is Patlavale MAAPS recorded today (not bricks). Total Bricks is PHYSICAL bricks (275 per maap) for the
  *   whole season; payments never change it. Payable bricks (250 per maap) are shown in the production section below.
  * - Outstanding and Paid Last 7 Days use the payments that are not deleted (reversed), the same as the Payments page.
+ * - Truck Pheera shows the Pheera (truck trips) recorded today and opens Trucks > Daily Entry (/trucks?tab=entry).
  * The whole card is clickable.
  */
 export default function DashboardStats({ attendanceToday, maap, production, money }) {
   const navigate = useNavigate();
+  const { rows: pheeraRows } = useTruckTrips();
+  const pheeraToday = filterPheeras(pheeraRows, { date: todayBusinessDate() }).length;
 
-  const cards = [
+  // First row: the cards that lead straight to a daily task.
+  const actionCards = [
     {
       tag: "Operations",
       title: "Bigari Present Today",
@@ -47,6 +55,20 @@ export default function DashboardStats({ attendanceToday, maap, production, mone
       to: "/patlavale-production",
     },
     {
+      tag: "Transport",
+      title: "Truck Pheera Today",
+      value: `${formatNumber(pheeraToday)} Pheera`,
+      caption: "Truck trips recorded today",
+      icon: Truck,
+      color: "blue",
+      action: "Truck Pheera Entry",
+      to: "/trucks?tab=entry",
+    },
+  ];
+
+  // Second row: totals and money.
+  const summaryCards = [
+    {
       tag: "Production",
       title: "Total Bricks Produced Till Date",
       value: formatNumber(production.season.totalPhysicalBricks),
@@ -56,8 +78,9 @@ export default function DashboardStats({ attendanceToday, maap, production, mone
       variant: "soft",
       action: "View Production",
       to: "/patlavale-production",
+      wide: true,
     },
-    // Money values are long, so these two take the full row on phones.
+    // Money values are long, so these take the full row on phones.
     {
       tag: "Finance",
       title: "Total Outstanding Balance",
@@ -84,23 +107,26 @@ export default function DashboardStats({ attendanceToday, maap, production, mone
     },
   ];
 
+  const renderCard = (card) => (
+    <StatCard
+      key={card.title}
+      tag={card.tag}
+      title={card.title}
+      value={card.value}
+      caption={card.caption}
+      icon={card.icon}
+      color={card.color}
+      variant={card.variant ?? "solid"}
+      actionLabel={card.action}
+      onCardClick={() => navigate(card.to)}
+      className={card.wide ? "col-span-2 flex-row items-center gap-3 lg:col-span-1" : undefined}
+    />
+  );
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
-      {cards.map((card) => (
-        <StatCard
-          key={card.title}
-          tag={card.tag}
-          title={card.title}
-          value={card.value}
-          caption={card.caption}
-          icon={card.icon}
-          color={card.color}
-          variant={card.variant ?? "solid"}
-          actionLabel={card.action}
-          onCardClick={() => navigate(card.to)}
-          className={card.wide ? "col-span-2 flex-row items-center gap-3 lg:col-span-1" : undefined}
-        />
-      ))}
+    <div className="space-y-3 sm:space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">{actionCards.map(renderCard)}</div>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">{summaryCards.map(renderCard)}</div>
     </div>
   );
 }

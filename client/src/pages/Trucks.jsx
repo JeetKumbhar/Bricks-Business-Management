@@ -1,11 +1,10 @@
-import { BarChart3, History, LayoutDashboard, ListChecks, Plus, Truck as TruckIcon } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { History, LayoutDashboard, ListChecks, Plus, Truck as TruckIcon } from "lucide-react";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { Button, Tabs } from "../components/ui";
 import PheeraEntryPanel from "../features/trucks/PheeraEntryPanel";
 import PheeraHistoryPanel from "../features/trucks/PheeraHistoryPanel";
 import TruckListPanel from "../features/trucks/TruckListPanel";
 import TruckOverview from "../features/trucks/TruckOverview";
-import TruckReportsPanel from "../features/trucks/TruckReportsPanel";
 import useTruckTrips from "../features/trucks/useTruckTrips";
 import useTruckManagement from "../features/trucks/useTruckManagement";
 
@@ -14,12 +13,11 @@ const TABS = [
   { id: "trucks", label: "All Trucks", icon: TruckIcon },
   { id: "entry", label: "Daily Entry", icon: ListChecks },
   { id: "history", label: "History", icon: History },
-  { id: "reports", label: "Reports", icon: BarChart3 },
 ];
 
 /**
- * Trucks: status and maintenance (the original page, now the "All Trucks" tab) plus daily Pheera (trip) entry,
- * history / search and reports. The tab is kept in the address (?tab=entry) so links and the back button work.
+ * Trucks: status and maintenance (the original page, now the "All Trucks" tab) plus daily Pheera (trip) entry and
+ * history / search. Business reports and exports live in the main Reports page (Reports > Trucks). The tab is kept in the address (?tab=entry) so links and the back button work.
  * Everything here is separate from labour earnings.
  */
 export default function Trucks() {
@@ -30,12 +28,15 @@ export default function Trucks() {
   const tab = TABS.some((t) => t.id === requested) ? requested : "overview";
   const setTab = (id) => setParams({ tab: id }, { replace: true });
 
+  // old bookmarks / links to the removed Reports tab go to the main Reports page
+  if (requested === "reports") return <Navigate to={`/reports?report=trucks${params.get("truck") ? `&truck=${params.get("truck")}` : ""}`} replace />;
+
   return (
     <div className="space-y-4 sm:space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="type-page-heading">Trucks</h1>
-          <p className="mt-1 text-sm text-fg-muted">Status, daily trips (Pheera), history and reports. Separate from labour earnings.</p>
+          <p className="mt-1 text-sm text-fg-muted">Status, daily trips (Pheera) and history. Reports are in the Reports page (Trucks tab). Separate from labour earnings.</p>
         </div>
         <Button leftIcon={Plus} onClick={mgmt.openAdd} className="hidden self-start sm:inline-flex">
           Add Truck
@@ -62,7 +63,6 @@ export default function Trucks() {
           <PheeraEntryPanel />
         </div>
         {tab === "history" && <PheeraHistoryPanel />}
-        {tab === "reports" && <TruckReportsPanel />}
       </div>
 
       {/* Phones: floating add button above the bottom nav (All Trucks tab only) */}

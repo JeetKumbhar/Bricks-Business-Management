@@ -93,7 +93,7 @@ export default function TruckDetail() {
             <Button variant="outline" leftIcon={History} onClick={() => mgmt.openHistory(truck)}>
               Status history
             </Button>
-            <Link to={`/trucks?tab=reports&truck=${truck.id}`}>
+            <Link to={`/reports?report=trucks&truck=${truck.id}`}>
               <Button variant="outline" leftIcon={BarChart3}>
                 Truck report
               </Button>

@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { Tabs } from "../components/ui";
 import PeriodSelector from "../features/accounts/PeriodSelector";
 import usePeriod from "../features/accounts/usePeriod";
@@ -6,6 +7,7 @@ import BigariReport from "../features/reports/BigariReport";
 import MaapvaliReport from "../features/reports/MaapvaliReport";
 import PatlavaleReport from "../features/reports/PatlavaleReport";
 import PaymentsReport from "../features/reports/PaymentsReport";
+import TruckReportsPanel from "../features/trucks/TruckReportsPanel";
 import { useState } from "react";
 
 const REPORTS = [
@@ -13,14 +15,20 @@ const REPORTS = [
   { id: "maapvali", label: "Maapvali" },
   { id: "patlavale", label: "Patlavale" },
   { id: "payments", label: "Payments" },
+  { id: "trucks", label: "Trucks" },
 ];
 
 /**
  * Reports for any date range (default: season to date), one per labour type plus Bayana and payment history.
  * Every report can be exported to CSV. Prototype calculations: final figures are calculated by the server.
+ * "Trucks" holds the six transportation (Pheera) reports. They have their own date / truck / material / destination filters
+ * and CSV, Excel and PDF export, so the labour period selector below is not shown for them.
+ * /reports?report=trucks opens that tab directly (the single-truck page also passes &truck=<id>).
  */
 export default function Reports() {
-  const [report, setReport] = useState("bigari");
+  const [params] = useSearchParams();
+  const [report, setReport] = useState(() => (REPORTS.some((r) => r.id === params.get("report")) ? params.get("report") : "bigari"));
+  const isTruck = report === "trucks";
   const { today, preset, setPreset, custom, setCustom, period } = usePeriod("SEASON");
   const { rows } = usePeriodAccounts(period.start, period.end);
 
@@ -31,7 +39,7 @@ export default function Reports() {
         <p className="mt-1 text-sm text-fg-muted">Choose a report and a date range. Each report can be exported to CSV.</p>
       </div>
 
-      <PeriodSelector today={today} preset={preset} onPresetChange={setPreset} custom={custom} onCustomChange={setCustom} period={period} />
+      {!isTruck && <PeriodSelector today={today} preset={preset} onPresetChange={setPreset} custom={custom} onCustomChange={setCustom} period={period} />}
 
       <div className="sticky top-16 z-20 -mx-4 bg-background px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <Tabs tabs={REPORTS} value={report} onChange={setReport} />
@@ -42,9 +50,10 @@ export default function Reports() {
         {report === "maapvali" && <MaapvaliReport key={`${period.start}|${period.end}`} rows={rows} period={period} />}
         {report === "patlavale" && <PatlavaleReport key={`${period.start}|${period.end}`} rows={rows} period={period} />}
         {report === "payments" && <PaymentsReport period={period} />}
+        {isTruck && <TruckReportsPanel />}
       </div>
 
-      <p className="type-small">Prototype calculation. Final figures are calculated by the server.</p>
+      {!isTruck && <p className="type-small">Prototype calculation. Final figures are calculated by the server.</p>}
     </div>
   );
 }

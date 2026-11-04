@@ -1,7 +1,7 @@
 // Validation for Pheera (truck trip) entry. Plain functions (no schema library) so the same rules can be reused by the
 // service layer and by tests. The server must repeat these checks when the backend exists.
 import { isBusinessDate } from "../utils/businessDate";
-import { MATERIALS, parseQuantity, unitForMaterial } from "../utils/materials";
+import { BRICKS, CUSTOM_MATERIAL_MAX, MATERIAL_CHOICES, OTHER, SOIL, parseQuantity, unitForMaterial } from "../utils/materials";
 
 export const DESTINATION_MIN = 2;
 export const DESTINATION_MAX = 60;
@@ -10,31 +10,45 @@ export const REMARKS_MAX = 200;
 export const normalizeText = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 
 /** An untouched, blank row. */
-export const emptyDraft = () => ({ material: "", destination: "", quantity: "", remarks: "" });
+// material = the dropdown choice (Bricks / Soil / Other); customMaterial = the typed name when the choice is Other
+export const emptyDraft = () => ({ material: "", customMaterial: "", destination: "", quantity: "", remarks: "" });
+
+/** The real material name of a draft: "Bricks", "Soil", or the trimmed custom name. "" when not known yet. */
+export const resolveMaterialName = (draft) => {
+  const choice = String(draft?.material ?? "");
+  return choice === OTHER ? normalizeText(draft?.customMaterial) : choice === BRICKS || choice === SOIL ? choice : "";
+};
 
 /**
- * One draft row: { material, destination, quantity (typed text), remarks }.
- * -> { errors: { material?, destination?, quantity?, remarks? }, value | null }
- * `value` is the cleaned row: { material, destination, quantity (number), unit, remarks }.
+ * One draft row: { material (Bricks | Soil | Other), customMaterial, destination, quantity (typed text), remarks }.
+ * -> { errors: { material?, customMaterial?, destination?, quantity?, remarks? }, value | null }
+ * `value` is the cleaned row: { material (the real name), destination, quantity (number), unit, remarks }.
  */
 export const validatePheeraDraft = (draft) => {
   const errors = {};
-  const material = String(draft?.material ?? "");
+  const choice = String(draft?.material ?? "");
+  const material = resolveMaterialName(draft);
   const destination = normalizeText(draft?.destination);
   const remarks = normalizeText(draft?.remarks);
 
-  if (!MATERIALS.includes(material)) errors.material = "Choose a material";
+  if (!MATERIAL_CHOICES.includes(choice)) errors.material = "Choose a material";
+  if (choice === OTHER) {
+    const lower = material.toLowerCase();
+    if (!material) errors.customMaterial = "Enter the material name";
+    else if (material.length > CUSTOM_MATERIAL_MAX) errors.customMaterial = `Material name is too long (max ${CUSTOM_MATERIAL_MAX})`;
+    else if (lower === "bricks" || lower === "soil" || lower === "other") errors.customMaterial = lower === "other" ? "Enter the actual material name, not Other" : `Choose ${material[0].toUpperCase()}${material.slice(1).toLowerCase()} from the list`;
+  }
   if (destination.length < DESTINATION_MIN) errors.destination = "Enter the destination";
   else if (destination.length > DESTINATION_MAX) errors.destination = `Destination is too long (max ${DESTINATION_MAX})`;
   if (remarks.length > REMARKS_MAX) errors.remarks = `Remarks are too long (max ${REMARKS_MAX})`;
 
+  // "Other" is always tonnes, so its quantity is checked even before the name is typed
   let quantity = null;
-  if (MATERIALS.includes(material)) {
-    const parsed = parseQuantity(material, draft?.quantity);
+  const quantityMaterial = choice === OTHER ? OTHER : material; // typed names are always tonnes
+  if (quantityMaterial) {
+    const parsed = parseQuantity(quantityMaterial, draft?.quantity);
     if (parsed.ok) quantity = parsed.value;
     else errors.quantity = parsed.message;
-  } else if (!errors.material) {
-    errors.quantity = "Choose a material first";
   } else {
     errors.quantity = "Choose a material, then enter the quantity";
   }

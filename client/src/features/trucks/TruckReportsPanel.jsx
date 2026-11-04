@@ -4,7 +4,8 @@ import { useSearchParams } from "react-router-dom";
 import { Button, Card, CardBody, CardHeader, DatePicker, EmptyState, Input, Select, Table, useToast } from "../../components/ui";
 import { addDaysISO, formatDate } from "../../utils/formatDate";
 import { todayBusinessDate } from "../../utils/businessDate";
-import { formatQuantity, MATERIALS } from "../../utils/materials";
+import { formatQuantity } from "../../utils/materials";
+import { materialFilterOptions } from "./pheeraSelectors";
 import { buildReport, REPORT_TYPES } from "./truckReports";
 import { EXPORT_FORMATS, exportReport } from "./reportExport";
 import useTruckTrips from "./useTruckTrips";
@@ -48,7 +49,7 @@ export default function TruckReportsPanel() {
   const today = todayBusinessDate();
 
   const [searchParams] = useSearchParams();
-  // /trucks?tab=reports&truck=<id> (from the single-truck page) opens the truck-wise report for that truck
+  // /reports?report=trucks&truck=<id> (from the single-truck page) opens the truck-wise report for that truck
   const linkedTruck = trucks.find((t) => t.id === searchParams.get("truck"));
   const [params, setParams] = useState(() => ({
     type: linkedTruck ? "truck" : "range",
@@ -105,7 +106,7 @@ export default function TruckReportsPanel() {
               onChange={(e) => set({ truckId: e.target.value })}
               options={trucks.map((t) => ({ value: t.id, label: t.nickname ? `${t.truckNumber} (${t.nickname})` : t.truckNumber }))}
             />
-            <Select label="Material" placeholder="All materials" value={params.material} onChange={(e) => set({ material: e.target.value })} options={MATERIALS.map((m) => ({ value: m, label: m }))} />
+            <Select label="Material" placeholder="All materials" value={params.material} onChange={(e) => set({ material: e.target.value })} options={materialFilterOptions(rows).map((m) => ({ value: m, label: m }))} />
             <Input label="Destination" list="report-destination-options" placeholder="All destinations" value={params.destination} onChange={(e) => set({ destination: e.target.value })} />
           </div>
           <datalist id="report-destination-options">

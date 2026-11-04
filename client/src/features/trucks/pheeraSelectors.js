@@ -1,6 +1,6 @@
 // Read-side helpers for Pheera: decorate, filter, sort, total, group, paginate. Pure functions.
 // Bricks and tonnes are always totalled separately.
-import { UNITS } from "../../utils/materials";
+import { STANDARD_MATERIALS, UNITS } from "../../utils/materials";
 import { activePheeras } from "./pheeraOps";
 
 /** Hundredths as integers, so 0.1 + 0.2 style rounding errors never show up in tonnes. */
@@ -35,7 +35,7 @@ const has = (text, q) => String(text ?? "").toLowerCase().includes(q);
 
 /**
  * filters: { date, from, to, truckId, search, material, destination }
- * `date` (one day) wins over from/to. `search` matches registration, nickname, destination or remarks.
+ * `date` (one day) wins over from/to. `search` matches registration, nickname, material, destination or remarks. `material` matches the saved name exactly (ignoring capitals).
  */
 export const filterPheeras = (rows, f = {}) => {
   const q = String(f.search ?? "").trim().toLowerCase();
@@ -48,9 +48,9 @@ export const filterPheeras = (rows, f = {}) => {
       if (f.to && r.businessDate > f.to) return false;
     }
     if (f.truckId && r.truckId !== f.truckId) return false;
-    if (f.material && r.material !== f.material) return false;
+    if (f.material && r.material.toLowerCase() !== String(f.material).toLowerCase()) return false;
     if (dest && !has(r.destination, dest)) return false;
-    if (q && !(has(r.registration, q) || has(r.truckRegistration, q) || has(r.truckNickname, q) || has(r.destination, q) || has(r.remarks, q))) return false;
+    if (q && !(has(r.registration, q) || has(r.truckRegistration, q) || has(r.material, q) || has(r.truckNickname, q) || has(r.destination, q) || has(r.remarks, q))) return false;
     return true;
   });
 };
@@ -86,6 +86,16 @@ export const paginate = (rows, page, pageSize) => {
   const current = Math.min(Math.max(1, page), pageCount);
   return { items: rows.slice((current - 1) * pageSize, current * pageSize), page: current, pageCount, total: rows.length };
 };
+
+/** Material names saved so far that are not Bricks / Soil (typed names and older records), most used first. */
+export const knownMaterials = (rows) => {
+  const counts = new Map();
+  for (const r of rows) if (!STANDARD_MATERIALS.includes(r.material)) counts.set(r.material, (counts.get(r.material) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name);
+};
+
+/** What the material FILTER lists: Bricks, Soil, then every other name found in the data. */
+export const materialFilterOptions = (rows) => [...STANDARD_MATERIALS, ...knownMaterials(rows)];
 
 /** Destinations used before, most used first (for the suggestion list). */
 export const knownDestinations = (rows) => {

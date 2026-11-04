@@ -15,16 +15,17 @@ const PLAN = {
   "TRK-02": { kind: "mixed", lastDaysAgo: 2 }, // stopped 1 day ago
   "TRK-03": { kind: "bricks", lastDaysAgo: 0 },
   "TRK-04": { kind: "mixed", lastDaysAgo: 3 }, // in maintenance since 2 days ago
-  "TRK-05": { kind: "sand", lastDaysAgo: 0 },
+  "TRK-05": { kind: "soil", lastDaysAgo: 0 },
   "TRK-06": { kind: "bricks", lastDaysAgo: 0 },
   "TRK-07": { kind: "mixed", lastDaysAgo: 1 }, // stopped today
   "TRK-08": { kind: "mixed", lastDaysAgo: 0 },
   "TRK-09": { kind: "bricks", lastDaysAgo: 0 },
-  "TRK-10": { kind: "sand", lastDaysAgo: 2 },
+  "TRK-10": { kind: "soil", lastDaysAgo: 2 },
 };
 
 const BRICK_LOADS = [1000, 1200, 1500, 2000, 2500, 3000];
-const TONNE_LOADS = { Sand: [3, 4, 4.5, 5, 6], Cement: [1, 1.5, 2, 2.5], Stone: [4, 5, 6, 7.5] };
+// tonnes per load. Soil is a standard material; "Stone Dust" and "Fly Ash" stand for names typed under "Other".
+const TONNE_LOADS = { Soil: [3, 4, 4.5, 5, 6, 7.5], "Stone Dust": [3, 4, 5, 6], "Fly Ash": [2, 3, 4] };
 
 const lcg = (seed) => {
   let s = seed;
@@ -37,8 +38,8 @@ const pick = (rand, list) => list[Math.floor(rand() * list.length)];
 
 const MATERIAL_BY_KIND = {
   bricks: ["Bricks"],
-  sand: ["Sand", "Sand", "Stone"],
-  mixed: ["Bricks", "Sand", "Cement", "Stone"],
+  soil: ["Soil", "Soil", "Soil", "Stone Dust"],
+  mixed: ["Bricks", "Soil", "Soil", "Stone Dust", "Fly Ash"],
 };
 
 function generate() {
@@ -55,9 +56,12 @@ function generate() {
       const trips = daysAgo === 0 ? 1 + Math.floor(rand() * 2) : 1 + Math.floor(rand() * 4);
       for (let n = 1; n <= trips; n += 1) {
         const material = pick(rand, MATERIAL_BY_KIND[plan.kind]);
-        const fits = material === "Bricks" ? [] : TONNE_LOADS[material].filter((t) => t <= (truck.capacity ?? 8) + 1);
-        const loads = fits.length > 0 ? fits : [TONNE_LOADS[material]?.[0] ?? 1]; // small trucks: smallest load
-        const quantity = material === "Bricks" ? pick(rand, BRICK_LOADS.slice(0, truck.capacity >= 6 ? 6 : 4)) : pick(rand, loads);
+        let quantity;
+        if (material === "Bricks") quantity = pick(rand, BRICK_LOADS.slice(0, truck.capacity >= 6 ? 6 : 4));
+        else {
+          const fits = TONNE_LOADS[material].filter((t) => t <= (truck.capacity ?? 8) + 1);
+          quantity = pick(rand, fits.length > 0 ? fits : [TONNE_LOADS[material][0]]); // small trucks: smallest load
+        }
         records.push({
           id: `pheera-seed-${truck.truckNumber}-${date}-${n}`,
           businessDate: date,

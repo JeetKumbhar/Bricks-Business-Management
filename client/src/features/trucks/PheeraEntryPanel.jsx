@@ -5,11 +5,11 @@ import { Badge, Button, Card, CardBody, CardHeader, DatePicker, Select, useToast
 import { validateBatch, validatePheeraDraft, emptyDraft } from "../../validators/pheeraValidator";
 import { todayBusinessDate } from "../../utils/businessDate";
 import { formatDate } from "../../utils/formatDate";
-import { formatQuantity, UNITS } from "../../utils/materials";
+import { formatQuantity, matchKnownMaterial, OTHER, UNITS } from "../../utils/materials";
 import { STOP_REASON_LABELS, TRUCK_STATUS, TRUCK_STATUS_META } from "../../utils/truckStatus";
 import { nextPheeraNumber, numberingGaps } from "./pheeraOps";
-import { summarizePheeras } from "./pheeraSelectors";
-import PheeraRowEditor, { DESTINATION_LIST_ID } from "./PheeraRowEditor";
+import { knownMaterials, summarizePheeras } from "./pheeraSelectors";
+import PheeraRowEditor, { DESTINATION_LIST_ID, MATERIAL_LIST_ID } from "./PheeraRowEditor";
 import PheeraTable from "./PheeraTable";
 import useTruckTrips from "./useTruckTrips";
 
@@ -17,7 +17,7 @@ const rand = () => Math.random().toString(36).slice(2, 8);
 const newBatchId = () => `batch-${Date.now().toString(36)}-${rand()}`;
 const blankRow = (base = {}) => ({ key: rand(), ...emptyDraft(), ...base });
 
-const touched = (d) => Boolean(d.material || d.destination || d.quantity || d.remarks);
+const touched = (d) => Boolean(d.material || d.customMaterial || d.destination || d.quantity || d.remarks);
 
 /**
  * Daily Pheera entry: pick the date and the truck, add one row per trip (material, quantity, destination, remarks),
@@ -40,6 +40,7 @@ export default function PheeraEntryPanel() {
 
   const truck = trucks.find((t) => t.id === truckId) ?? null;
   const check = useMemo(() => validateBatch({ businessDate, truckId, today, trucks, drafts }), [businessDate, truckId, today, trucks, drafts]);
+  const customNames = useMemo(() => knownMaterials(savedAll), [savedAll]);
   const dirty = drafts.some(touched) || drafts.length > 1;
 
   // warn before closing / reloading the tab with entries that are not saved yet
@@ -80,7 +81,7 @@ export default function PheeraEntryPanel() {
     setDrafts((prev) => {
       const last = prev[prev.length - 1];
       // a new row starts with the previous material and destination (the quantity is always typed fresh)
-      return [...prev, blankRow(last ? { material: last.material, destination: last.destination } : {})];
+      return [...prev, blankRow(last ? { material: last.material, customMaterial: last.customMaterial, destination: last.destination } : {})];
     });
 
   const handleSave = async () => {
@@ -93,7 +94,9 @@ export default function PheeraEntryPanel() {
     savingRef.current = true;
     setSaving(true);
     try {
-      const result = await savePheeraBatch({ batchId: batchIdRef.current, businessDate, truckId, drafts });
+      // a typed name spelled like one already used (only the capitals differ) is saved with the existing spelling
+      const prepared = drafts.map((d) => (d.material === OTHER ? { ...d, customMaterial: matchKnownMaterial(d.customMaterial.trim().replace(/\s+/g, " "), customNames) } : d));
+      const result = await savePheeraBatch({ batchId: batchIdRef.current, businessDate, truckId, drafts: prepared });
       if (result.duplicate) toast.info("This entry was already saved");
       else toast.success(`${result.records.length} Pheera saved for ${truck.truckNumber}`);
       setDrafts([blankRow()]);
@@ -172,6 +175,11 @@ export default function PheeraEntryPanel() {
         </Card>
       )}
 
+      <datalist id={MATERIAL_LIST_ID}>
+        {customNames.map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
       <datalist id={DESTINATION_LIST_ID}>
         {destinations.map((d) => (
           <option key={d} value={d} />

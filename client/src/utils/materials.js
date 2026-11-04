@@ -1,14 +1,25 @@
-// Material catalogue and quantity rules for truck Pheera (trips). One place to change them.
+// Material rules for truck Pheera (trips). One place to change them.
 //
-// Confirmed with the client:
-//  - Bricks      -> "Number of Bricks", unit "bricks", whole numbers only.
-//  - Everything else -> "Weight (Tonnes)", unit "tonnes". No kg / quintal.
+//  - Bricks  -> "Number of Bricks", unit "bricks", whole numbers only.
+//  - Soil    -> "Weight (Tonnes)", unit "tonnes".
+//  - Other   -> the user types the real material name (for example "Stone Dust"); "Weight (Tonnes)", unit "tonnes".
+// A saved Pheera keeps the ACTUAL material name ("Stone Dust", never just "Other") together with its own unit.
 // Bricks and tonnes are different units: they are NEVER added together anywhere in the app.
+//
+// Older records may carry names that are no longer offered (Sand, Cement, Stone). They are kept and shown exactly as
+// saved, and any name other than "Bricks" is measured in tonnes (frontend-only compatibility, nothing is rewritten).
 
 export const BRICKS = "Bricks";
+export const SOIL = "Soil";
+export const OTHER = "Other";
 
-/** Add a material here to make it selectable. Any name other than "Bricks" is measured in tonnes. */
-export const MATERIALS = ["Bricks", "Sand", "Cement", "Stone"];
+/** What the material dropdown offers for a new entry. */
+export const MATERIAL_CHOICES = [BRICKS, SOIL, OTHER];
+
+/** The standard materials (the others are typed by the user). Used by the filters. */
+export const STANDARD_MATERIALS = [BRICKS, SOIL];
+
+export const CUSTOM_MATERIAL_MAX = 40;
 
 export const UNITS = { BRICKS: "bricks", TONNES: "tonnes" };
 
@@ -18,6 +29,12 @@ export const MAX_TONNES_PER_PHEERA = 100;
 export const TONNE_DECIMALS = 2;
 
 export const isBricks = (material) => material === BRICKS;
+
+/** The dropdown choice that a saved material name belongs to: "Bricks", "Soil", or "Other" (any other name). */
+export const materialChoiceOf = (name) => (name === BRICKS ? BRICKS : name === SOIL ? SOIL : OTHER);
+
+/** For a custom name that is spelled like one already used (different capitals), reuse the existing spelling. */
+export const matchKnownMaterial = (name, knownNames = []) => knownNames.find((k) => k.toLowerCase() === String(name).toLowerCase()) ?? name;
 
 export const unitForMaterial = (material) => (isBricks(material) ? UNITS.BRICKS : UNITS.TONNES);
 
