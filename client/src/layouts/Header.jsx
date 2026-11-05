@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, BrickWall, ChevronDown, LogOut, Settings } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Settings } from "lucide-react";
+import wordmark from "../assets/aayush-wordmark.png";
 import { Dropdown, SearchInput } from "../components/ui";
 
 // TODO (auth phase): replace with the logged-in user from AuthContext.
@@ -26,12 +27,8 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 bg-secondary px-4 text-white sm:px-6 lg:border-b lg:border-border lg:bg-surface lg:px-8 lg:text-fg">
       {/* Brand (mobile only - the sidebar shows it on desktop) */}
-      <div className="flex items-center gap-2.5 lg:hidden">
-        <BrickWall className="h-8 w-8 text-orange-500" aria-hidden="true" />
-        <div className="leading-tight">
-          <p className="text-lg font-bold">BrickPro</p>
-          <p className="text-[11px] text-white/70">Brick Business Management</p>
-        </div>
+      <div className="rounded-lg bg-white px-2 py-1 lg:hidden">
+        <img src={wordmark} alt="Aayush Carting" className="block h-9 w-auto" />
       </div>
 
       {/* Search (desktop only) */}

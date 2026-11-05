@@ -21,7 +21,7 @@ export default function Settings() {
     <div className="space-y-4 sm:space-y-5">
       <div>
         <h1 className="type-page-heading">Settings</h1>
-        <p className="mt-1 text-sm text-fg-muted">The rules BrickPro uses today. Nothing here is editable yet.</p>
+        <p className="mt-1 text-sm text-fg-muted">The rules Aayush Carting uses today. Nothing here is editable yet.</p>
       </div>
 
       <Card>
@@ -95,7 +95,7 @@ export default function Settings() {
         title="About"
         icon={Info}
         rows={[
-          { label: "App", value: "BrickPro - Brick Business Management" },
+          { label: "App", value: "Aayush Carting - Bricks & Transport Management" },
           { label: "Version", value: "Prototype" },
           { label: "Data", value: "Sample data kept in the browser. It resets when the page is reloaded." },
         ]}

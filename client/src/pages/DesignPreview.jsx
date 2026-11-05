@@ -60,7 +60,7 @@ function Preview() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-8">
-      <h1 className="type-page-heading">BrickPro Design System</h1>
+      <h1 className="type-page-heading">Aayush Carting Design System</h1>
 
       <Section title="Colors">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">

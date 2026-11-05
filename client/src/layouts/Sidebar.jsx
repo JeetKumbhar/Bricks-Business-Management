@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { BrickWall } from "lucide-react";
+import logo from "../assets/aayush-logo.png";
 import { cn } from "../utils/cn";
 import { navItems } from "./navItems";
 
@@ -7,11 +8,10 @@ import { navItems } from "./navItems";
 export default function Sidebar() {
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col bg-secondary text-white lg:flex">
-      <div className="flex h-16 shrink-0 items-center gap-3 px-5">
-        <BrickWall className="h-9 w-9 text-orange-500" aria-hidden="true" />
-        <div className="leading-tight">
-          <p className="text-xl font-bold">BrickPro</p>
-          <p className="text-[11px] text-white/70">Brick Business Management</p>
+      {/* Brand: the logo sits on a white card because its lettering is dark red (it would not show on the navy sidebar) */}
+      <div className="shrink-0 px-3 pb-1 pt-4">
+        <div className="rounded-xl bg-white px-3 py-2">
+          <img src={logo} alt="Aayush Carting - Bricks, Transport, Building Together" className="block h-auto w-full" />
         </div>
       </div>
 
