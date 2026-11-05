@@ -17,7 +17,9 @@
     "test:auth": "vitest run tests/auth.test.js tests/authCookie.test.js tests/user.model.test.js",
     "test:labour": "vitest run tests/labour.test.js",
     "test:attendance": "vitest run tests/attendance.test.js",
-    "test:maapEntry": "vitest run tests/maapEntry.test.js"
+    "test:maapEntry": "vitest run tests/maapEntry.test.js",
+    "test:productionEntry": "vitest run tests/productionEntry.test.js",
+    "create-owner": "node scripts/createOwner.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

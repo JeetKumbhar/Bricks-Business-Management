@@ -65,6 +65,8 @@ export const db = {
   rates: [],
   attendance: new Map(), // key "labourId|date"
   maap: new Map(), // key = _id
+  seasons: new Map(), // key = _id
+  production: new Map(), // key = _id
   counters: {},
   failNextRateCreate: false,
   reset() {
@@ -72,6 +74,10 @@ export const db = {
     this.rates.length = 0;
     this.attendance.clear();
     this.maap.clear();
+    this.seasons.clear();
+    this.production.clear();
+    this.beforeProductionUpdate = null;
+    this.failNextProductionWrite = null;
     this.beforeMaapUpdate = null;
     this.failNextMaapWrite = null;
     this.failNextAttendanceWrite = null;
@@ -232,6 +238,77 @@ export const makeMaapEntryModel = () => {
       for (const [k, by] of Object.entries(update.$inc ?? {})) next[k] = (next[k] ?? 0) + by;
       for (const [k, v] of Object.entries(update.$push ?? {})) next[k] = [...(next[k] ?? []), clone(v)];
       if (liveClash(next)) throw duplicate({ labourId: 1, date: 1 });
+      Object.assign(found, next, { updatedAt: now });
+      return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
+    },
+  };
+};
+
+/** In-memory Season collection: unique name, create (validated by the real schema), find and a revision-guarded updateOne. */
+export const makeSeasonModel = (Real) => {
+  const rows = () => [...db.seasons.values()];
+  const nameClash = (row) => rows().some((r) => r._id !== row._id && r.name === row.name);
+  return {
+    find(filter) {
+      return new Query(rows().filter((r) => matches(r, filter)).map(clone));
+    },
+    async create(data) {
+      const doc = new Real(data);
+      const err = doc.validateSync();
+      if (err) throw err;
+      const row = raw(doc);
+      row._id = String(row._id);
+      if (nameClash(row)) throw duplicate({ name: 1 });
+      row.createdAt = row.updatedAt = new Date();
+      db.seasons.set(row._id, row);
+      return { toObject: () => clone(row) };
+    },
+    async updateOne(filter, update) {
+      const found = rows().find((r) => matches(r, filter));
+      if (!found) return { matchedCount: 0, modifiedCount: 0 };
+      const next = { ...found, ...clone(update.$set ?? {}) };
+      for (const [k, by] of Object.entries(update.$inc ?? {})) next[k] = (next[k] ?? 0) + by;
+      if (nameClash(next)) throw duplicate({ name: 1 });
+      Object.assign(found, next, { updatedAt: new Date() });
+      return { matchedCount: 1, modifiedCount: 1 };
+    },
+  };
+};
+
+/**
+ * In-memory ProductionEntry collection: the partial unique index (one LIVE entry per teamId + date), upsert with
+ * $setOnInsert, and the $set / $inc / $push updates the production service uses. `db.beforeProductionUpdate` lets a test
+ * change data between the service's read and its write.
+ */
+export const makeProductionEntryModel = () => {
+  const rows = () => [...db.production.values()];
+  const liveClash = (row) => rows().some((r) => r._id !== row._id && !r.isDeleted && !row.isDeleted && r.teamId === row.teamId && r.date === row.date);
+  return {
+    find(filter) {
+      return new Query(rows().filter((r) => matches(r, filter)).map(clone));
+    },
+    async countDocuments(filter) {
+      return rows().filter((r) => matches(r, filter)).length;
+    },
+    async updateOne(filter, update, options = {}) {
+      if (db.failNextProductionWrite === "duplicate") {
+        db.failNextProductionWrite = null;
+        throw duplicate({ teamId: 1, date: 1 });
+      }
+      db.beforeProductionUpdate?.(filter);
+      const found = rows().find((r) => matches(r, filter));
+      const now = new Date();
+      if (!found) {
+        if (!options.upsert) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+        const row = { _id: new mongoose.Types.ObjectId().toString(), ...clone(update.$setOnInsert ?? {}), createdAt: now, updatedAt: now };
+        if (liveClash(row)) throw duplicate({ teamId: 1, date: 1 });
+        db.production.set(row._id, row);
+        return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+      }
+      const next = { ...found, ...clone(update.$set ?? {}) };
+      for (const [k, by] of Object.entries(update.$inc ?? {})) next[k] = (next[k] ?? 0) + by;
+      for (const [k, v] of Object.entries(update.$push ?? {})) next[k] = [...(next[k] ?? []), clone(v)];
+      if (liveClash(next)) throw duplicate({ teamId: 1, date: 1 });
       Object.assign(found, next, { updatedAt: now });
       return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
     },
