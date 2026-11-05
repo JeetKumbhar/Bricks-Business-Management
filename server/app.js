@@ -13,6 +13,7 @@ import healthRoutes from "./routes/health.routes.js";
 import attendanceRoutes, { labourAttendanceRouter } from "./routes/attendance.routes.js";
 import labourRoutes from "./routes/labour.routes.js";
 import maapEntryRoutes, { labourMaapRouter } from "./routes/maapEntry.routes.js";
+import paymentRoutes, { balancesRouter, labourBalanceRouter, labourPaymentsRouter } from "./routes/payment.routes.js";
 import productionEntryRoutes, { labourProductionRouter } from "./routes/productionEntry.routes.js";
 import seasonRoutes from "./routes/season.routes.js";
 
@@ -55,10 +56,14 @@ export function createApp({ loginRateLimit } = {}) {
   app.use("/api/labours/:id/attendance", labourAttendanceRouter); // before /api/labours so it is matched first
   app.use("/api/labours/:id/maap-entries", labourMaapRouter);
   app.use("/api/labours/:id/production-entries", labourProductionRouter);
+  app.use("/api/labours/:id/payments", labourPaymentsRouter);
+  app.use("/api/labours/:id/balance", labourBalanceRouter);
   app.use("/api/labours", labourRoutes);
   app.use("/api/attendance", attendanceRoutes);
   app.use("/api/maap-entries", maapEntryRoutes);
   app.use("/api/seasons", seasonRoutes);
+  app.use("/api/payments", paymentRoutes);
+  app.use("/api/balances", balancesRouter);
   app.use("/api/production-entries", productionEntryRoutes);
 
   app.use(notFound);

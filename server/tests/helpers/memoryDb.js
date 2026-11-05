@@ -67,6 +67,7 @@ export const db = {
   maap: new Map(), // key = _id
   seasons: new Map(), // key = _id
   production: new Map(), // key = _id
+  payments: new Map(), // key = _id
   counters: {},
   failNextRateCreate: false,
   reset() {
@@ -76,6 +77,9 @@ export const db = {
     this.maap.clear();
     this.seasons.clear();
     this.production.clear();
+    this.payments.clear();
+    this.beforePaymentUpdate = null;
+    this.beforePaymentCreate = null;
     this.beforeProductionUpdate = null;
     this.failNextProductionWrite = null;
     this.beforeMaapUpdate = null;
@@ -311,6 +315,45 @@ export const makeProductionEntryModel = () => {
       if (liveClash(next)) throw duplicate({ teamId: 1, date: 1 });
       Object.assign(found, next, { updatedAt: now });
       return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
+    },
+  };
+};
+
+/**
+ * In-memory Payment collection: create (validated by the real schema) with the unique string requestId index, find /
+ * countDocuments, and a guarded updateOne with $set / $inc / $push. `db.beforePaymentUpdate` lets a test change data
+ * between the service's read and its write.
+ */
+export const makePaymentModel = (Real) => {
+  const rows = () => [...db.payments.values()];
+  return {
+    find(filter) {
+      return new Query(rows().filter((r) => matches(r, filter)).map(clone));
+    },
+    async countDocuments(filter) {
+      return rows().filter((r) => matches(r, filter)).length;
+    },
+    async create(data) {
+      db.beforePaymentCreate?.(data);
+      const doc = new Real(data);
+      const err = doc.validateSync();
+      if (err) throw err;
+      const row = raw(doc);
+      row._id = String(row._id);
+      if (typeof row.requestId === "string" && rows().some((r) => r.requestId === row.requestId)) throw duplicate({ requestId: 1 });
+      row.createdAt = row.updatedAt = new Date();
+      db.payments.set(row._id, row);
+      return { toObject: () => clone(row) };
+    },
+    async updateOne(filter, update) {
+      db.beforePaymentUpdate?.(filter);
+      const found = rows().find((r) => matches(r, filter));
+      if (!found) return { matchedCount: 0, modifiedCount: 0 };
+      const next = { ...found, ...clone(update.$set ?? {}) };
+      for (const [k, by] of Object.entries(update.$inc ?? {})) next[k] = (next[k] ?? 0) + by;
+      for (const [k, v] of Object.entries(update.$push ?? {})) next[k] = [...(next[k] ?? []), clone(v)];
+      Object.assign(found, next, { updatedAt: new Date() });
+      return { matchedCount: 1, modifiedCount: 1 };
     },
   };
 };
