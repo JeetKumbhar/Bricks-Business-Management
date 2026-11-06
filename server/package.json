@@ -8,19 +8,21 @@
   "engines": {
     "node": ">=20.6"
   },
-  "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "test": "vitest run",
-    "test:app": "vitest run tests/app.test.js",
-    "test:core": "vitest run tests/db.test.js tests/env.test.js tests/money.test.js tests/dates.test.js tests/schema.test.js",
-    "test:auth": "vitest run tests/auth.test.js tests/authCookie.test.js tests/user.model.test.js",
-    "test:labour": "vitest run tests/labour.test.js",
-    "test:attendance": "vitest run tests/attendance.test.js",
-    "test:maapEntry": "vitest run tests/maapEntry.test.js",
-    "test:productionEntry": "vitest run tests/productionEntry.test.js",
-    "create-owner": "node scripts/createOwner.js"
-  },
+ "scripts": {
+  "start": "node server.js",
+  "dev": "node --watch server.js",
+  "test": "vitest run",
+  "test:app": "vitest run tests/app.test.js",
+  "test:core": "vitest run tests/db.test.js tests/env.test.js tests/money.test.js tests/dates.test.js tests/schema.test.js",
+  "test:auth": "vitest run tests/auth.test.js tests/authCookie.test.js tests/user.model.test.js",
+  "test:labour": "vitest run tests/labour.test.js",
+  "test:attendance": "vitest run tests/attendance.test.js",
+  "test:maapEntry": "vitest run tests/maapEntry.test.js",
+  "test:productionEntry": "vitest run tests/productionEntry.test.js",
+  "test:payment": "vitest run tests/payment.test.js",
+  "test:salary": "vitest run tests/salary.test.js",
+  "create-owner": "node scripts/createOwner.js"
+},
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",

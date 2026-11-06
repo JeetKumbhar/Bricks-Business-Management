@@ -15,6 +15,7 @@ import labourRoutes from "./routes/labour.routes.js";
 import maapEntryRoutes, { labourMaapRouter } from "./routes/maapEntry.routes.js";
 import paymentRoutes, { balancesRouter, labourBalanceRouter, labourPaymentsRouter } from "./routes/payment.routes.js";
 import productionEntryRoutes, { labourProductionRouter } from "./routes/productionEntry.routes.js";
+import salaryRoutes from "./routes/salary.routes.js";
 import seasonRoutes from "./routes/season.routes.js";
 
 // Built as a function so tests can create a fresh app. Nothing here listens on a port (see server.js).
@@ -64,6 +65,7 @@ export function createApp({ loginRateLimit } = {}) {
   app.use("/api/seasons", seasonRoutes);
   app.use("/api/payments", paymentRoutes);
   app.use("/api/balances", balancesRouter);
+  app.use("/api/salary", salaryRoutes);
   app.use("/api/production-entries", productionEntryRoutes);
 
   app.use(notFound);
