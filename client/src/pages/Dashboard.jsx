@@ -7,6 +7,8 @@ import RecentPayments from "../features/dashboard/RecentPayments";
 import TruckStatus from "../features/dashboard/TruckStatus";
 import TypeBalances from "../features/dashboard/TypeBalances";
 import useDashboardData from "../features/dashboard/useDashboardData";
+import { firstName } from "../features/auth/authState";
+import useAuth from "../features/auth/useAuth";
 import WeeklySalarySummary from "../features/dashboard/WeeklySalarySummary";
 import { formatLongDate, getGreeting } from "../utils/formatDate";
 
@@ -16,6 +18,7 @@ import { formatLongDate, getGreeting } from "../utils/formatDate";
  */
 export default function Dashboard() {
   const data = useDashboardData();
+  const { user } = useAuth();
   const now = new Date();
 
   return (
@@ -23,7 +26,7 @@ export default function Dashboard() {
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="type-page-heading">
-            {getGreeting(now)}, {data.owner.firstName}!
+            {getGreeting(now)}, {firstName(user)}!
           </h1>
           <p className="mt-1 text-sm text-fg-muted">Here's what's happening with your business today.</p>
         </div>

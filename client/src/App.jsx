@@ -1,5 +1,6 @@
 import { BrowserRouter } from "react-router-dom";
 import { ToastProvider } from "./components/ui";
+import { AuthProvider } from "./context/AuthContext";
 import { LabourProvider } from "./context/LabourContext";
 import { TruckProvider } from "./context/TruckContext";
 import { TruckTripProvider } from "./context/TruckTripContext";
@@ -11,13 +12,15 @@ export default function App() {
     <>
       <BrowserRouter>
         <ToastProvider>
-          <LabourProvider>
-            <TruckProvider>
-              <TruckTripProvider>
-                <AppRoutes />
-              </TruckTripProvider>
-            </TruckProvider>
-          </LabourProvider>
+          <AuthProvider>
+            <LabourProvider>
+              <TruckProvider>
+                <TruckTripProvider>
+                  <AppRoutes />
+                </TruckTripProvider>
+              </TruckProvider>
+            </LabourProvider>
+          </AuthProvider>
         </ToastProvider>
       </BrowserRouter>
       {/* Visual layer only; plays once per full page load and sits above the already-mounted app. */}

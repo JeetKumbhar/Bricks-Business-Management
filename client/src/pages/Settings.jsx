@@ -1,7 +1,8 @@
 import { Cog, ListChecks, Info, UserRound } from "lucide-react";
 import { Card, CardBody } from "../components/ui";
 import SettingsSection from "../features/settings/SettingsSection";
-import { dashboardData } from "../mock/dashboard";
+import { roleLabel } from "../features/auth/authState";
+import useAuth from "../features/auth/useAuth";
 import { ACCOUNTING_POLICY } from "../utils/accountCalculations";
 import { BRICKS_PER_MAAP, PAYABLE_BRICKS_PER_MAAP } from "../utils/labourTypes";
 import { DRIVERS_LINKED_TO_LABOUR } from "../utils/truckStatus";
@@ -15,7 +16,7 @@ const yesNo = (value, yes, no) => (value ? yes : no);
  * An editable setting is added only when the client confirms it is needed.
  */
 export default function Settings() {
-  const { owner } = dashboardData;
+  const { user } = useAuth();
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -40,8 +41,9 @@ export default function Settings() {
         title="Account"
         icon={UserRound}
         rows={[
-          { label: "Name", value: owner.fullName },
-          { label: "Role", value: owner.role },
+          { label: "Name", value: user?.name },
+          { label: "Email", value: user?.email },
+          { label: "Role", value: roleLabel(user?.role) },
         ]}
       />
 

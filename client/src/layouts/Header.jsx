@@ -2,27 +2,29 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, ChevronDown, LogOut, Settings } from "lucide-react";
 import wordmark from "../assets/aayush-wordmark.png";
-import { Dropdown, SearchInput } from "../components/ui";
+import { Dropdown, SearchInput, useToast } from "../components/ui";
+import { initialsOf, roleLabel } from "../features/auth/authState";
+import useAuth from "../features/auth/useAuth";
 
-// TODO (auth phase): replace with the logged-in user from AuthContext.
-const currentUser = { name: "Ramesh Patel", role: "Owner" };
 // TODO (dashboard/notifications phase): replace with real unread count.
 const unreadNotifications = 3;
-
-const initials = (name) =>
-  name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
 /**
  * Mobile: navy bar with logo.  Desktop (lg+): white bar with search.
  */
 export default function Header() {
   const navigate = useNavigate();
+  const toast = useToast();
+  const { user, logout } = useAuth();
   const [query, setQuery] = useState(""); // global search is wired up in a later phase
+
+  // On success the signed-in user is cleared and the protected routes send the owner to /login.
+  const handleLogout = async () => {
+    const result = await logout();
+    if (!result.ok) toast.error(result.message);
+  };
+
+  const displayName = user?.name ?? "";
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 bg-secondary px-4 text-white sm:px-6 lg:border-b lg:border-border lg:bg-surface lg:px-8 lg:text-fg">
@@ -56,11 +58,11 @@ export default function Header() {
           trigger={
             <span className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-white">
-                {initials(currentUser.name)}
+                {initialsOf(displayName)}
               </span>
               <span className="hidden text-left leading-tight sm:block">
-                <span className="block text-sm font-medium">{currentUser.name}</span>
-                <span className="block text-xs text-white/70 lg:text-fg-muted">{currentUser.role}</span>
+                <span className="block text-sm font-medium">{displayName}</span>
+                <span className="block text-xs text-white/70 lg:text-fg-muted">{roleLabel(user?.role)}</span>
               </span>
               <ChevronDown className="h-4 w-4" aria-hidden="true" />
             </span>
@@ -68,8 +70,7 @@ export default function Header() {
           items={[
             { label: "Settings", icon: Settings, onClick: () => navigate("/settings") },
             { type: "divider" },
-            // TODO (auth phase): call logout() before navigating.
-            { label: "Log out", icon: LogOut, variant: "danger", onClick: () => navigate("/login") },
+            { label: "Log out", icon: LogOut, variant: "danger", onClick: handleLogout },
           ]}
         />
       </div>
