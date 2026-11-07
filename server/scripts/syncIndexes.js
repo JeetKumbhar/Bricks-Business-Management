@@ -20,6 +20,8 @@ import "../models/Season.js";
 import "../models/Truck.js";
 import "../models/TruckStatusHistory.js";
 import "../models/TruckTrip.js";
+import "../models/Bill.js";
+import "../models/InvoiceSettings.js";
 import "../models/User.js";
 
 try {

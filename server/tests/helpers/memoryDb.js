@@ -74,6 +74,8 @@ export const db = {
   trucks: new Map(), // key = _id
   truckHistory: new Map(), // key = _id
   trips: new Map(), // key = _id
+  bills: new Map(), // key = _id
+  invoiceSettings: new Map(), // key = _id
   counters: {},
   failNextRateCreate: false,
   reset() {
@@ -87,6 +89,9 @@ export const db = {
     this.trucks.clear();
     this.truckHistory.clear();
     this.trips.clear();
+    this.bills.clear();
+    this.invoiceSettings.clear();
+    this.beforeBillUpdate = null;
     this.beforeTripInsert = null;
     this.beforeTruckUpdate = null;
     this.failHistoryInsert = false;
@@ -376,16 +381,18 @@ export const makePaymentModel = (Real) => {
  * were (all-or-nothing), the way a real aborted transaction does.
  */
 db.transaction = async (work) => {
-  const take = () => [db.trucks, db.truckHistory, db.trips].map((store) => [...store.entries()].map(([k, v]) => [k, structuredClone(v)]));
+  const stores = [db.trucks, db.truckHistory, db.trips, db.bills, db.invoiceSettings];
+  const take = () => [...stores.map((store) => [...store.entries()].map(([k, v]) => [k, structuredClone(v)])), structuredClone(db.counters)];
   let snapshot = take();
   db.resnapshot = () => { snapshot = take(); }; // a rival writer's committed change is not undone by OUR rollback
   try {
     return await work();
   } catch (err) {
-    [db.trucks, db.truckHistory, db.trips].forEach((store, i) => {
+    stores.forEach((store, i) => {
       store.clear();
       for (const [k, v] of snapshot[i]) store.set(k, v);
     });
+    db.counters = snapshot[stores.length];
     throw err;
   }
 };
@@ -457,3 +464,25 @@ export const makeTruckTripModel = (Real) =>
       db.beforeTripInsert?.(data, index);
     },
   });
+
+export const makeBillModel = (Real) =>
+  makeDocModel(Real, db.bills, {
+    unique: (row, all) => typeof row.billNumber === "string" && all.some((r) => r._id !== row._id && r.billNumber === row.billNumber),
+    beforeUpdate: (filter) => db.beforeBillUpdate?.(filter),
+  });
+
+export const makeInvoiceSettingsModel = (Real) => {
+  const base = makeDocModel(Real, db.invoiceSettings);
+  return {
+    find: base.find,
+    async updateOne(filter, update) {
+      const found = db.invoiceSettings.get(filter._id);
+      if (found) return Object.assign(found, clone(update.$set), { updatedAt: new Date() }), { matchedCount: 1, modifiedCount: 1 };
+      const doc = new Real({ _id: filter._id, ...clone(update.$set) });
+      const err = doc.validateSync();
+      if (err) throw err;
+      db.invoiceSettings.set(filter._id, { ...raw(doc), updatedAt: new Date() });
+      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+    },
+  };
+};

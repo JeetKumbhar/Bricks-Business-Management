@@ -16,6 +16,8 @@ import maapEntryRoutes, { labourMaapRouter } from "./routes/maapEntry.routes.js"
 import paymentRoutes, { balancesRouter, labourBalanceRouter, labourPaymentsRouter } from "./routes/payment.routes.js";
 import productionEntryRoutes, { labourProductionRouter } from "./routes/productionEntry.routes.js";
 import truckReportRoutes from "./routes/truckReport.routes.js";
+import billRoutes from "./routes/bill.routes.js";
+import invoiceSettingsRoutes from "./routes/invoiceSettings.routes.js";
 import truckRoutes from "./routes/truck.routes.js";
 import truckTripRoutes from "./routes/truckTrip.routes.js";
 import salaryRoutes from "./routes/salary.routes.js";
@@ -72,6 +74,8 @@ export function createApp({ loginRateLimit } = {}) {
   app.use("/api/trucks", truckRoutes);
   app.use("/api/truck-trips", truckTripRoutes);
   app.use("/api/truck-reports", truckReportRoutes);
+  app.use("/api/bills", billRoutes);
+  app.use("/api/invoice-settings", invoiceSettingsRoutes);
   app.use("/api/production-entries", productionEntryRoutes);
 
   app.use(notFound);
