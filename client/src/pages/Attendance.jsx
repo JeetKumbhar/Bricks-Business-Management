@@ -13,6 +13,7 @@ import AttendanceSummaryBar from "../features/attendance/AttendanceSummaryBar";
 import AttendanceToolbar from "../features/attendance/AttendanceToolbar";
 import { filterLabours } from "../features/labours/labourSelectors";
 import useLabours from "../features/labours/useLabours";
+import { getErrorMessage } from "../services/api";
 import { formatDate, toISODate } from "../utils/formatDate";
 
 /**
@@ -31,6 +32,7 @@ export default function Attendance() {
   const [filter, setFilter] = useState("ALL"); // ALL | UNMARKED
   const [pendingDate, setPendingDate] = useState(null); // date waiting for "discard changes?" answer
   const [confirmSave, setConfirmSave] = useState(false);
+  const [saving, setSaving] = useState(false); // a save is in flight: blocks a second click
 
   const saved = useMemo(() => getAttendanceByDate(date), [getAttendanceByDate, date]);
   const eligible = useMemo(() => getEligibleLabours(allLabours, date, saved), [allLabours, date, saved]);
@@ -86,14 +88,24 @@ export default function Attendance() {
     else applyDate(next);
   };
 
-  const doSave = () => {
-    saveAttendance(
-      date,
-      changes.map((l) => ({ labourId: l.id, status: draft[l.id] }))
-    );
-    setDraft({});
-    setConfirmSave(false);
-    toast.success(`Attendance saved for ${formatDate(date)}`);
+  // Saved on the server first. Only after the server confirms are the taps cleared and "saved" shown; if it fails, the taps
+  // stay on screen so nothing has to be marked again.
+  const doSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await saveAttendance(
+        date,
+        changes.map((l) => ({ labourId: l.id, status: draft[l.id] }))
+      );
+      setDraft({});
+      setConfirmSave(false);
+      toast.success(`Attendance saved for ${formatDate(date)}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not save attendance. Nothing was saved."));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const requestSave = () => {
@@ -102,7 +114,7 @@ export default function Attendance() {
   };
 
   const saveButton = (extraClass) => (
-    <Button leftIcon={Save} onClick={requestSave} disabled={!dirty} className={extraClass}>
+    <Button leftIcon={Save} onClick={requestSave} disabled={!dirty} loading={saving} className={extraClass}>
       Save Attendance
     </Button>
   );
@@ -184,6 +196,7 @@ export default function Attendance() {
         message={`${counts.unmarked} ${counts.unmarked === 1 ? "labour has" : "labours have"} no status for ${formatDate(date)}. They will have no attendance (0 days) for this day. Save anyway?`}
         confirmText="Save anyway"
         cancelText="Keep marking"
+        loading={saving}
         onConfirm={doSave}
         onCancel={() => setConfirmSave(false)}
       />

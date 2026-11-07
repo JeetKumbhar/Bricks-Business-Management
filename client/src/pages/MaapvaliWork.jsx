@@ -16,6 +16,7 @@ import {
 } from "../features/work/maapvali/maapSelectors";
 import MaapSummaryTiles from "../features/work/maapvali/MaapSummaryTiles";
 import useMaapvaliWork from "../features/work/maapvali/useMaapvaliWork";
+import { getErrorMessage } from "../services/api";
 import { formatCurrency, formatNumber } from "../utils/formatCurrency";
 import { addDaysISO, formatDate, toISODate } from "../utils/formatDate";
 import { summarizeMaapWork } from "../utils/workCalculations";
@@ -36,6 +37,7 @@ export default function MaapvaliWork() {
   const [filter, setFilter] = useState("ALL"); // ALL | NOT_ENTERED | ENTERED
   const [pendingDate, setPendingDate] = useState(null);
   const [confirmSave, setConfirmSave] = useState(false);
+  const [saving, setSaving] = useState(false); // a request is in flight: blocks a second click
 
   // History section
   const [histSearch, setHistSearch] = useState("");
@@ -83,16 +85,31 @@ export default function MaapvaliWork() {
     else applyDate(next);
   };
 
-  const doSave = (reason) => {
-    const count = saveMaapDay(
-      date,
-      changed.map((r) => ({ labourId: r.worker.id, maaps: Number(r.text), note: r.note.trim() })),
-      isPast ? reason : undefined
-    );
-    setDraft({});
-    setConfirmSave(false);
-    toast.success(`${count} ${count === 1 ? "entry" : "entries"} saved for ${formatDate(date)}`);
+  // Every change is saved on the server first. The typed values are cleared and "saved" is shown only after the server
+  // confirms; if it fails they stay on screen (and the reason dialog stays open) so nothing is lost or re-typed.
+  const runRequest = async (action, failure) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await action();
+    } catch (err) {
+      toast.error(getErrorMessage(err, failure));
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const doSave = (reason) =>
+    runRequest(async () => {
+      const count = await saveMaapDay(
+        date,
+        changed.map((r) => ({ labourId: r.worker.id, maaps: Number(r.text), note: r.note.trim() })),
+        isPast ? reason : undefined
+      );
+      setDraft({});
+      setConfirmSave(false);
+      toast.success(`${count} ${count === 1 ? "entry" : "entries"} saved for ${formatDate(date)}`);
+    }, "Could not save. Nothing was saved.");
 
   const requestSave = () => {
     if (invalid.length > 0) {
@@ -111,7 +128,7 @@ export default function MaapvaliWork() {
     .join(" ");
 
   const saveButton = (extraClass) => (
-    <Button leftIcon={Save} onClick={requestSave} disabled={!dirty} className={extraClass}>
+    <Button leftIcon={Save} onClick={requestSave} disabled={!dirty} loading={saving} className={extraClass}>
       Save Daily Entries
     </Button>
   );
@@ -244,11 +261,14 @@ export default function MaapvaliWork() {
         allWorkers={maapvali}
         previewEntry={previewEntry}
         onClose={() => setEditing(null)}
-        onSubmit={(values) => {
-          updateMaapEntry(editing.id, { date: values.date, numberOfMaaps: values.maaps, note: values.note }, values.reason);
-          toast.success("Work entry corrected");
-          setEditing(null);
-        }}
+        saving={saving}
+        onSubmit={(values) =>
+          runRequest(async () => {
+            await updateMaapEntry(editing.id, { date: values.date, numberOfMaaps: values.maaps, note: values.note }, values.reason);
+            toast.success("Work entry corrected");
+            setEditing(null);
+          }, "Could not correct the entry. Nothing was changed.")
+        }
       />
 
       <ConfirmDialog
@@ -258,6 +278,7 @@ export default function MaapvaliWork() {
         message={saveMessage}
         confirmText="Save"
         cancelText="Keep editing"
+        loading={saving}
         requireReason={isPast}
         reasonLabel="Reason for changing a previous day"
         onConfirm={doSave}
@@ -290,11 +311,14 @@ export default function MaapvaliWork() {
         confirmText="Delete"
         requireReason
         reasonLabel="Reason for deleting"
-        onConfirm={(reason) => {
-          deleteMaapEntry(deleting.id, reason);
-          toast.success("Work entry deleted");
-          setDeleting(null);
-        }}
+        loading={saving}
+        onConfirm={(reason) =>
+          runRequest(async () => {
+            await deleteMaapEntry(deleting.id, reason);
+            toast.success("Work entry deleted");
+            setDeleting(null);
+          }, "Could not delete the entry. Nothing was changed.")
+        }
         onCancel={() => setDeleting(null)}
       />
     </div>

@@ -8,7 +8,7 @@ const FORM_ID = "edit-labour-form";
  * <EditLabourModal labour={editingLabour} onClose isMobileTaken={(mobile) => ...} onSubmit={(id, values) => ...} />
  * Opens whenever `labour` is set. Type and rate are shown read-only.
  */
-export default function EditLabourModal({ labour, onClose, isMobileTaken, onSubmit }) {
+export default function EditLabourModal({ labour, onClose, isMobileTaken, onSubmit, saving = false }) {
   return (
     <Modal
       open={Boolean(labour)}
@@ -18,10 +18,10 @@ export default function EditLabourModal({ labour, onClose, isMobileTaken, onSubm
       description={labour ? `${labour.id} - ${labour.name}` : undefined}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form={FORM_ID}>
+          <Button type="submit" form={FORM_ID} loading={saving}>
             Save Changes
           </Button>
         </>

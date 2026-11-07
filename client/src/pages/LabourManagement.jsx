@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Button, ConfirmDialog, useToast } from "../components/ui";
+import { getErrorMessage } from "../services/api";
 import AddLabourModal from "../features/labours/AddLabourModal";
 import EditLabourModal from "../features/labours/EditLabourModal";
 import LabourFilters from "../features/labours/LabourFilters";
@@ -17,7 +18,7 @@ export default function LabourManagement() {
   const navigate = useNavigate();
   const toast = useToast();
   // allLabours = every worker and team (all three types)
-  const { allLabours: labours, nextLabourId, addLabour, updateLabour, isMobileTaken } = useLabours();
+  const { allLabours: labours, addLabour, updateLabour, isMobileTaken } = useLabours();
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -27,6 +28,7 @@ export default function LabourManagement() {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState(null); // labour being edited
   const [toggling, setToggling] = useState(null); // labour whose status is being changed
+  const [saving, setSaving] = useState(false); // a save is in flight: blocks a second click
 
   const counts = useMemo(() => getLabourCounts(labours), [labours]);
   const filtered = useMemo(
@@ -54,26 +56,43 @@ export default function LabourManagement() {
     setPage(1);
   };
 
-  const handleAdd = (values) => {
-    const labour = addLabour(toLabourInput(values));
-    setAddOpen(false);
-    clearFilters();
-    setPage(Number.MAX_SAFE_INTEGER); // table clamps this to the last page, where the new record appears
-    toast.success(`${labour.name} added as ${labour.id}`);
+  // Each save goes to the server first. The window closes and the success message shows only after the server has saved;
+  // on a failure the window stays open (so nothing typed is lost) and the server's reason is shown.
+  const runSave = async (action) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await action();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not save. Nothing was changed."));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleEdit = (id, values) => {
-    updateLabour(id, values); // only name, mobile, village, joining date and status are applied
-    setEditing(null);
-    toast.success("Labour updated");
-  };
+  const handleAdd = (values) =>
+    runSave(async () => {
+      const labour = await addLabour(toLabourInput(values));
+      setAddOpen(false);
+      clearFilters();
+      setPage(Number.MAX_SAFE_INTEGER); // table clamps this to the last page, where the new record appears
+      toast.success(`${labour.name} added as ${labour.id}`);
+    });
 
-  const handleToggleConfirm = () => {
-    const nextStatus = toggling.status === LABOUR_STATUS.ACTIVE ? LABOUR_STATUS.INACTIVE : LABOUR_STATUS.ACTIVE;
-    updateLabour(toggling.id, { status: nextStatus });
-    toast.success(`${toggling.name} marked ${nextStatus === LABOUR_STATUS.ACTIVE ? "active" : "inactive"}`);
-    setToggling(null);
-  };
+  const handleEdit = (id, values) =>
+    runSave(async () => {
+      await updateLabour(id, values); // only name, mobile, village, joining date and status are sent, and only if changed
+      setEditing(null);
+      toast.success("Labour updated");
+    });
+
+  const handleToggleConfirm = () =>
+    runSave(async () => {
+      const nextStatus = toggling.status === LABOUR_STATUS.ACTIVE ? LABOUR_STATUS.INACTIVE : LABOUR_STATUS.ACTIVE;
+      await updateLabour(toggling.id, { status: nextStatus });
+      toast.success(`${toggling.name} marked ${nextStatus === LABOUR_STATUS.ACTIVE ? "active" : "inactive"}`);
+      setToggling(null);
+    });
 
   const deactivating = toggling?.status === LABOUR_STATUS.ACTIVE;
 
@@ -127,9 +146,9 @@ export default function LabourManagement() {
       <AddLabourModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        nextLabourId={nextLabourId}
         isMobileTaken={(mobile) => isMobileTaken(mobile)}
         onSubmit={handleAdd}
+        saving={saving}
       />
 
       <EditLabourModal
@@ -137,6 +156,7 @@ export default function LabourManagement() {
         onClose={() => setEditing(null)}
         isMobileTaken={(mobile) => isMobileTaken(mobile, editing?.id)}
         onSubmit={handleEdit}
+        saving={saving}
       />
 
       <ConfirmDialog
@@ -149,6 +169,7 @@ export default function LabourManagement() {
             : `${toggling?.name} will be marked active again.`
         }
         confirmText={deactivating ? "Mark inactive" : "Mark active"}
+        loading={saving}
         onConfirm={handleToggleConfirm}
         onCancel={() => setToggling(null)}
       />

@@ -62,7 +62,17 @@ export default function Payments() {
     setPage(1);
   };
 
-  const handleSubmit = (values) => {
+  // Payments are shown from the server, but saving them is connected in the payments module. Until then a save is refused
+  // with a clear message instead of keeping a payment only in this browser tab.
+  const guard = (action) => {
+    try {
+      action();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the payment.");
+    }
+  };
+
+  const handleSubmit = (values) => guard(() => {
     const recipientName = labours.find((l) => l.id === values.labourId)?.name ?? values.labourId;
 
     if (form.payment) {
@@ -84,13 +94,13 @@ export default function Payments() {
       toast.success(`${formatCurrency(values.amount)} recorded for ${recipientName}`);
     }
     setForm(null);
-  };
+  });
 
-  const handleDelete = (reason) => {
+  const handleDelete = (reason) => guard(() => {
     deletePayment(deleting.id, reason);
     toast.success("Payment deleted. It stays on record.");
     setDeleting(null);
-  };
+  });
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -105,6 +115,11 @@ export default function Payments() {
           Add Payment
         </Button>
       </div>
+
+      <p role="note" className="rounded-lg bg-warning-soft px-3 py-2.5 text-sm text-amber-900">
+        Payment history is read from the server. <strong>Adding, correcting or deleting a payment is not connected to the server yet</strong>, so it is
+        switched off until the payments step. Nothing you try here is saved.
+      </p>
 
       <PaymentSummaryTiles today={paidToday} last7Days={paidLast7} shown={sumAmount(filtered)} />
 

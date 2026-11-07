@@ -76,7 +76,7 @@ function ChangeRateForm({ currentRate, minDate, onSubmit }) {
  * <ChangeRateModal open onClose currentRate latestEffectiveFrom onSubmit={(values) => ...} />
  * values: { newRate (number), effectiveFrom, reason }
  */
-export default function ChangeRateModal({ open, onClose, currentRate, latestEffectiveFrom, onSubmit }) {
+export default function ChangeRateModal({ open, onClose, currentRate, latestEffectiveFrom, onSubmit, saving = false }) {
   const minDate = addDaysISO(latestEffectiveFrom, 1);
 
   return (
@@ -87,10 +87,10 @@ export default function ChangeRateModal({ open, onClose, currentRate, latestEffe
       description="Every change is saved in the rate history."
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form={FORM_ID}>
+          <Button type="submit" form={FORM_ID} loading={saving}>
             Save New Rate
           </Button>
         </>

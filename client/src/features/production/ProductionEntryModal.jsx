@@ -4,7 +4,7 @@ import ProductionEntryForm from "./ProductionEntryForm";
 const FORM_ID = "production-entry-form";
 
 /** Correct one saved production entry. New production is entered on the daily list, not here. A reason is required. */
-export default function ProductionEntryModal({ open, entry, allTeams, preview, onClose, onSubmit }) {
+export default function ProductionEntryModal({ open, entry, allTeams, preview, onClose, onSubmit, saving = false }) {
   return (
     <Modal
       open={open}
@@ -14,10 +14,10 @@ export default function ProductionEntryModal({ open, entry, allTeams, preview, o
       description="Correct this entry. A reason is required."
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form={FORM_ID}>
+          <Button type="submit" form={FORM_ID} loading={saving}>
             Save Changes
           </Button>
         </>

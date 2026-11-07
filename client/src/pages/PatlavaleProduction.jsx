@@ -17,6 +17,8 @@ import ProductionSummary from "../features/production/ProductionSummary";
 import useProduction from "../features/production/useProduction";
 import DailySummaryTiles from "../features/work/shared/DailySummaryTiles";
 import WorkDateBar from "../features/work/shared/WorkDateBar";
+import SeasonBanner from "../features/production/SeasonBanner";
+import { getErrorMessage } from "../services/api";
 import { formatCurrency, formatNumber } from "../utils/formatCurrency";
 import { formatDate, toISODate } from "../utils/formatDate";
 
@@ -36,6 +38,7 @@ export default function PatlavaleProduction() {
   const [filter, setFilter] = useState("ALL"); // ALL | NOT_ENTERED | ENTERED
   const [pendingDate, setPendingDate] = useState(null);
   const [confirmSave, setConfirmSave] = useState(false);
+  const [saving, setSaving] = useState(false); // a request is in flight: blocks a second click
 
   // History section
   const [teamId, setTeamId] = useState("ALL");
@@ -83,16 +86,31 @@ export default function PatlavaleProduction() {
     else applyDate(next);
   };
 
-  const doSave = (reason) => {
-    const count = saveProductionDay(
-      date,
-      changed.map((r) => ({ teamId: r.owner.id, maaps: Number(r.text), note: r.note.trim() })),
-      isPast ? reason : undefined
-    );
-    setDraft({});
-    setConfirmSave(false);
-    toast.success(`${count} ${count === 1 ? "entry" : "entries"} saved for ${formatDate(date)}`);
+  // Every change is saved on the server first. The typed values are cleared and "saved" is shown only after the server
+  // confirms; if it fails they stay on screen (and the reason dialog stays open) so nothing is lost or re-typed.
+  const runRequest = async (action, failure) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await action();
+    } catch (err) {
+      toast.error(getErrorMessage(err, failure));
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const doSave = (reason) =>
+    runRequest(async () => {
+      const count = await saveProductionDay(
+        date,
+        changed.map((r) => ({ teamId: r.owner.id, maaps: Number(r.text), note: r.note.trim() })),
+        isPast ? reason : undefined
+      );
+      setDraft({});
+      setConfirmSave(false);
+      toast.success(`${count} ${count === 1 ? "entry" : "entries"} saved for ${formatDate(date)}`);
+    }, "Could not save. Nothing was saved.");
 
   const requestSave = () => {
     if (invalid.length > 0) {
@@ -111,7 +129,7 @@ export default function PatlavaleProduction() {
     .join(" ");
 
   const saveButton = (extraClass) => (
-    <Button leftIcon={Save} onClick={requestSave} disabled={!dirty} className={extraClass}>
+    <Button leftIcon={Save} onClick={requestSave} disabled={!dirty} loading={saving} className={extraClass}>
       Save Daily Entries
     </Button>
   );
@@ -155,6 +173,8 @@ export default function PatlavaleProduction() {
       ) : (
         <>
           <WorkDateBar date={date} today={today} onChange={requestDateChange} label="Production date" />
+
+          <SeasonBanner date={date} />
 
           <DailySummaryTiles
             tiles={[
@@ -246,11 +266,14 @@ export default function PatlavaleProduction() {
         allTeams={teams}
         preview={preview}
         onClose={() => setEditing(null)}
-        onSubmit={(values) => {
-          updateProductionEntry(editing.id, { date: values.date, newMaaps: values.maaps, note: values.note }, values.reason);
-          toast.success("Production entry corrected");
-          setEditing(null);
-        }}
+        saving={saving}
+        onSubmit={(values) =>
+          runRequest(async () => {
+            await updateProductionEntry(editing.id, { date: values.date, newMaaps: values.maaps, note: values.note }, values.reason);
+            toast.success("Production entry corrected");
+            setEditing(null);
+          }, "Could not correct the entry. Nothing was changed.")
+        }
       />
 
       <ConfirmDialog
@@ -260,6 +283,7 @@ export default function PatlavaleProduction() {
         message={saveMessage}
         confirmText="Save"
         cancelText="Keep editing"
+        loading={saving}
         requireReason={isPast}
         reasonLabel="Reason for changing a previous day"
         onConfirm={doSave}
@@ -292,11 +316,14 @@ export default function PatlavaleProduction() {
         confirmText="Delete"
         requireReason
         reasonLabel="Reason for deleting"
-        onConfirm={(reason) => {
-          deleteProductionEntry(deleting.id, reason);
-          toast.success("Production entry deleted");
-          setDeleting(null);
-        }}
+        loading={saving}
+        onConfirm={(reason) =>
+          runRequest(async () => {
+            await deleteProductionEntry(deleting.id, reason);
+            toast.success("Production entry deleted");
+            setDeleting(null);
+          }, "Could not delete the entry. Nothing was changed.")
+        }
         onCancel={() => setDeleting(null)}
       />
     </div>

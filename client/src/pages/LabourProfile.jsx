@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Users } from "lucide-react";
-import { Button, ConfirmDialog, EmptyState, Tabs, useToast } from "../components/ui";
+import { Button, ConfirmDialog, EmptyState, LoadingState, Tabs, useToast } from "../components/ui";
+import { getErrorMessage } from "../services/api";
 import EditLabourModal from "../features/labours/EditLabourModal";
 import useLabours from "../features/labours/useLabours";
 import AttendanceTab from "../features/labours/profile/AttendanceTab";
@@ -31,13 +32,24 @@ export default function LabourProfile() {
   const navigate = useNavigate();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
-  const { getAnyLabour, getAttendance, getPayments, getRateHistory, updateLabour, isMobileTaken, changeRate } = useLabours();
+  const { getAnyLabour, getAttendance, getPayments, getRateHistory, updateLabour, isMobileTaken, changeRate, loadRateHistory, isRateHistoryLoaded } = useLabours();
 
   const [editOpen, setEditOpen] = useState(false);
   const [toggleOpen, setToggleOpen] = useState(false);
   const [rateOpen, setRateOpen] = useState(false);
+  const [saving, setSaving] = useState(false); // a save is in flight: blocks a second click
+  const [rateError, setRateError] = useState("");
 
   const labour = getAnyLabour(id);
+
+  // Bigari rate histories are read with the rest of the data; the other types read theirs when their profile opens.
+  const labourExists = Boolean(labour);
+  const rateReady = isRateHistoryLoaded(id);
+  useEffect(() => {
+    if (!labourExists) return;
+    setRateError("");
+    loadRateHistory(id).catch((err) => setRateError(getErrorMessage(err, "Could not load the rate history.")));
+  }, [id, labourExists, loadRateHistory]);
 
   if (!labour) {
     return (
@@ -63,24 +75,41 @@ export default function LabourProfile() {
   const rateHistory = getRateHistory(labour.id);
   const isActive = labour.status === LABOUR_STATUS.ACTIVE;
 
-  const handleEdit = (labourId, values) => {
-    updateLabour(labourId, values); // only name, mobile, village, joining date and status are applied
-    setEditOpen(false);
-    toast.success("Labour updated");
+  // Each save goes to the server first; the window closes and the message shows only after it has saved. On a failure the
+  // window stays open (nothing typed is lost) and the server's reason is shown.
+  const runSave = async (action) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await action();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not save. Nothing was changed."));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleToggleConfirm = () => {
-    const next = isActive ? LABOUR_STATUS.INACTIVE : LABOUR_STATUS.ACTIVE;
-    updateLabour(labour.id, { status: next });
-    setToggleOpen(false);
-    toast.success(`${labour.name} marked ${isActive ? "inactive" : "active"}`);
-  };
+  const handleEdit = (labourId, values) =>
+    runSave(async () => {
+      await updateLabour(labourId, values); // only name, mobile, village, joining date and status are sent, and only if changed
+      setEditOpen(false);
+      toast.success("Labour updated");
+    });
 
-  const handleRateChange = (values) => {
-    changeRate(labour.id, { rate: values.newRate, effectiveFrom: values.effectiveFrom, reason: values.reason });
-    setRateOpen(false);
-    toast.success(`Rate set to ${formatCurrency(values.newRate)} from ${formatDate(values.effectiveFrom)}`);
-  };
+  const handleToggleConfirm = () =>
+    runSave(async () => {
+      const next = isActive ? LABOUR_STATUS.INACTIVE : LABOUR_STATUS.ACTIVE;
+      await updateLabour(labour.id, { status: next });
+      setToggleOpen(false);
+      toast.success(`${labour.name} marked ${isActive ? "inactive" : "active"}`);
+    });
+
+  const handleRateChange = (values) =>
+    runSave(async () => {
+      await changeRate(labour.id, { rate: values.newRate, effectiveFrom: values.effectiveFrom, reason: values.reason });
+      setRateOpen(false);
+      toast.success(`Rate set to ${formatCurrency(values.newRate)} from ${formatDate(values.effectiveFrom)}`);
+    });
 
   const payments = <PaymentsTab labour={labour} payments={getPayments(labour.id)} />;
 
@@ -127,9 +156,14 @@ export default function LabourProfile() {
             payments
           ))}
 
-        {tab === "rate-history" && (
-          <RateHistoryTab labour={labour} history={rateHistory} onChangeRate={isBigari ? () => setRateOpen(true) : undefined} />
-        )}
+        {tab === "rate-history" &&
+          (rateReady ? (
+            <RateHistoryTab labour={labour} history={rateHistory} onChangeRate={isBigari ? () => setRateOpen(true) : undefined} />
+          ) : rateError ? (
+            <EmptyState title="Could not load the rate history" description={`${rateError} Nothing has been changed.`} />
+          ) : (
+            <LoadingState label="Loading rate history..." />
+          ))}
       </div>
 
       <EditLabourModal
@@ -137,6 +171,7 @@ export default function LabourProfile() {
         onClose={() => setEditOpen(false)}
         isMobileTaken={(mobile) => isMobileTaken(mobile, labour.id)}
         onSubmit={handleEdit}
+        saving={saving}
       />
 
       {isBigari && (
@@ -144,8 +179,9 @@ export default function LabourProfile() {
           open={rateOpen}
           onClose={() => setRateOpen(false)}
           currentRate={labour.dailyRate}
-          latestEffectiveFrom={rateHistory[0].effectiveFrom}
+          latestEffectiveFrom={rateHistory[0]?.effectiveFrom ?? labour.joiningDate}
           onSubmit={handleRateChange}
+          saving={saving}
         />
       )}
 
@@ -159,6 +195,7 @@ export default function LabourProfile() {
             : `${labour.name} will be marked active again.`
         }
         confirmText={isActive ? "Mark inactive" : "Mark active"}
+        loading={saving}
         onConfirm={handleToggleConfirm}
         onCancel={() => setToggleOpen(false)}
       />
