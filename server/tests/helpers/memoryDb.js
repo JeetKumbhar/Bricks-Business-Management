@@ -52,6 +52,9 @@ class Query {
   lean() {
     return this;
   }
+  session() {
+    return this;
+  }
   then(resolve, reject) {
     return Promise.resolve(this.rows.map(clone)).then(resolve, reject);
   }
@@ -68,6 +71,9 @@ export const db = {
   seasons: new Map(), // key = _id
   production: new Map(), // key = _id
   payments: new Map(), // key = _id
+  trucks: new Map(), // key = _id
+  truckHistory: new Map(), // key = _id
+  trips: new Map(), // key = _id
   counters: {},
   failNextRateCreate: false,
   reset() {
@@ -78,6 +84,13 @@ export const db = {
     this.seasons.clear();
     this.production.clear();
     this.payments.clear();
+    this.trucks.clear();
+    this.truckHistory.clear();
+    this.trips.clear();
+    this.beforeTripInsert = null;
+    this.beforeTruckUpdate = null;
+    this.failHistoryInsert = false;
+    this.failTripAt = null;
     this.beforePaymentUpdate = null;
     this.beforePaymentCreate = null;
     this.beforeProductionUpdate = null;
@@ -357,3 +370,90 @@ export const makePaymentModel = (Real) => {
     },
   };
 };
+
+/**
+ * Fake MongoDB transaction: runs the work, and if it throws, puts the truck, history and Pheera collections back exactly as they
+ * were (all-or-nothing), the way a real aborted transaction does.
+ */
+db.transaction = async (work) => {
+  const take = () => [db.trucks, db.truckHistory, db.trips].map((store) => [...store.entries()].map(([k, v]) => [k, structuredClone(v)]));
+  let snapshot = take();
+  db.resnapshot = () => { snapshot = take(); }; // a rival writer's committed change is not undone by OUR rollback
+  try {
+    return await work();
+  } catch (err) {
+    [db.trucks, db.truckHistory, db.trips].forEach((store, i) => {
+      store.clear();
+      for (const [k, v] of snapshot[i]) store.set(k, v);
+    });
+    throw err;
+  }
+};
+
+/**
+ * Generic in-memory collection for the truck models: insertMany (validated by the real schema, ObjectId references stored as
+ * strings, unique indexes as E11000), find / countDocuments, and a guarded updateOne with $set / $inc / $push. `hook(data, index)`
+ * runs before each insert so a test can simulate a concurrent writer or a database fault part-way through a batch.
+ */
+export const makeDocModel = (Real, store, { unique = () => false, hook, beforeUpdate } = {}) => {
+  const rows = () => [...store.values()];
+  return {
+    find(filter) {
+      return new Query(rows().filter((r) => matches(r, filter)).map(clone));
+    },
+    async countDocuments(filter) {
+      return rows().filter((r) => matches(r, filter)).length;
+    },
+    async insertMany(docs) {
+      const created = [];
+      for (const [index, data] of docs.entries()) {
+        hook?.(data, index);
+        const doc = new Real(data);
+        const err = doc.validateSync();
+        if (err) throw err;
+        const row = raw(doc);
+        row._id = String(row._id);
+        for (const [k, v] of Object.entries(row)) if (k !== "_id" && v instanceof mongoose.Types.ObjectId) row[k] = String(v);
+        if (unique(row, rows())) throw duplicate({ unique: 1 });
+        row.createdAt = row.updatedAt = new Date();
+        store.set(row._id, row);
+        created.push(row);
+      }
+      return created.map((r) => ({ ...clone(r), toObject: () => clone(r) }));
+    },
+    async updateOne(filter, update) {
+      beforeUpdate?.(filter);
+      const found = rows().find((r) => matches(r, filter));
+      if (!found) return { matchedCount: 0, modifiedCount: 0 };
+      const next = { ...found, ...clone(update.$set ?? {}) };
+      for (const [k, by] of Object.entries(update.$inc ?? {})) next[k] = (next[k] ?? 0) + by;
+      for (const [k, v] of Object.entries(update.$push ?? {})) next[k] = [...(next[k] ?? []), clone(v)];
+      if (unique(next, rows().filter((r) => r._id !== found._id))) throw duplicate({ unique: 1 });
+      Object.assign(found, next, { updatedAt: new Date() });
+      return { matchedCount: 1, modifiedCount: 1 };
+    },
+  };
+};
+
+export const makeTruckModel = (Real) => makeDocModel(Real, db.trucks, { unique: (row, all) => all.some((r) => r._id !== row._id && r.truckKey === row.truckKey), beforeUpdate: (filter) => db.beforeTruckUpdate?.(filter) });
+export const makeTruckHistoryModel = (Real) =>
+  makeDocModel(Real, db.truckHistory, {
+    hook: () => {
+      if (db.failHistoryInsert) {
+        db.failHistoryInsert = false;
+        throw new Error("simulated database failure");
+      }
+    },
+  });
+export const makeTruckTripModel = (Real) =>
+  makeDocModel(Real, db.trips, {
+    unique: (row, all) =>
+      all.some((r) => r._id !== row._id && ((r.truckId === row.truckId && r.businessDate === row.businessDate && r.pheeraNo === row.pheeraNo) || (typeof row.submissionId === "string" && r.submissionId === row.submissionId && r.clientRowId === row.clientRowId))),
+    hook: (data, index) => {
+      if (db.failTripAt === index) {
+        db.failTripAt = null;
+        throw new Error("simulated database failure");
+      }
+      db.beforeTripInsert?.(data, index);
+    },
+  });
