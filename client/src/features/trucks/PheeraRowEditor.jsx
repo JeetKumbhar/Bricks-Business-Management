@@ -6,8 +6,8 @@ export const DESTINATION_LIST_ID = "pheera-entry-destinations";
 export const MATERIAL_LIST_ID = "pheera-entry-materials";
 
 /**
- * One Pheera in the entry form. Material is Bricks, Soil or Other. Bricks ask for "Number of Bricks" (whole numbers);
- * Soil and Other ask for "Weight (Tonnes)". Other also asks for the real material name, which is what gets saved.
+ * One Pheera in the entry form. Material is a standard material (Bricks, Sand, Stone, Khadi Matti, Grawal, Hard Murram, Soil) or Other.
+ * Bricks ask for "Number of Bricks" (whole numbers); every other material asks for "Weight (Tonnes)". Other also asks for the real material name, which is what gets saved.
  * `errors` only has messages after the first save attempt.
  */
 export default function PheeraRowEditor({ title, draft, errors = {}, duplicateHint, onChange, onRemove }) {

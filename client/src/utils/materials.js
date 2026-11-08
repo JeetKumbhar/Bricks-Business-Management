@@ -1,23 +1,25 @@
 // Material rules for truck Pheera (trips). One place to change them.
 //
 //  - Bricks  -> "Number of Bricks", unit "bricks", whole numbers only.
-//  - Soil    -> "Weight (Tonnes)", unit "tonnes".
+//  - Sand, Stone, Khadi Matti, Grawal, Hard Murram, Soil -> "Weight (Tonnes)", unit "tonnes".
 //  - Other   -> the user types the real material name (for example "Stone Dust"); "Weight (Tonnes)", unit "tonnes".
 // A saved Pheera keeps the ACTUAL material name ("Stone Dust", never just "Other") together with its own unit.
 // Bricks and tonnes are different units: they are NEVER added together anywhere in the app.
 //
-// Older records may carry names that are no longer offered (Sand, Cement, Stone). They are kept and shown exactly as
+// Older records may carry names that are not offered any more (for example Cement). They are kept and shown exactly as
 // saved, and any name other than "Bricks" is measured in tonnes (frontend-only compatibility, nothing is rewritten).
 
 export const BRICKS = "Bricks";
 export const SOIL = "Soil";
 export const OTHER = "Other";
 
-/** What the material dropdown offers for a new entry. */
-export const MATERIAL_CHOICES = [BRICKS, SOIL, OTHER];
+/** The standard materials, in dropdown order (anything else is typed by the user under "Other"). Used by the filters too. */
+export const STANDARD_MATERIALS = [BRICKS, "Sand", "Stone", "Khadi Matti", "Grawal", "Hard Murram", SOIL];
 
-/** The standard materials (the others are typed by the user). Used by the filters. */
-export const STANDARD_MATERIALS = [BRICKS, SOIL];
+/** What the material dropdown offers for a new entry. */
+export const MATERIAL_CHOICES = [...STANDARD_MATERIALS, OTHER];
+
+export const isStandardMaterial = (name) => STANDARD_MATERIALS.includes(name);
 
 export const CUSTOM_MATERIAL_MAX = 40;
 
@@ -30,8 +32,8 @@ export const TONNE_DECIMALS = 2;
 
 export const isBricks = (material) => material === BRICKS;
 
-/** The dropdown choice that a saved material name belongs to: "Bricks", "Soil", or "Other" (any other name). */
-export const materialChoiceOf = (name) => (name === BRICKS ? BRICKS : name === SOIL ? SOIL : OTHER);
+/** The dropdown choice that a saved material name belongs to: a standard material, or "Other" (any other name). */
+export const materialChoiceOf = (name) => (isStandardMaterial(name) ? name : OTHER);
 
 /** For a custom name that is spelled like one already used (different capitals), reuse the existing spelling. */
 export const matchKnownMaterial = (name, knownNames = []) => knownNames.find((k) => k.toLowerCase() === String(name).toLowerCase()) ?? name;

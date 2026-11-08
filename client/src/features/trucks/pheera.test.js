@@ -1,7 +1,7 @@
 // Tests for Pheera (truck trips): quantity rules, validation, numbering, totals, reports, service.
 // Run with Vitest: npx vitest run src/features/trucks
 import { describe, expect, it } from "vitest";
-import { formatQuantity, materialChoiceOf, matchKnownMaterial, parseQuantity } from "../../utils/materials";
+import { formatQuantity, MATERIAL_CHOICES, materialChoiceOf, matchKnownMaterial, parseQuantity } from "../../utils/materials";
 import { isBusinessDate, todayBusinessDate } from "../../utils/businessDate";
 import { resolveMaterialName, validateBatch, validatePheeraDraft } from "../../validators/pheeraValidator";
 import { buildPheeraRecords, markPheeraDeleted, nextPheeraNumber, numberingGaps } from "./pheeraOps";
@@ -268,8 +268,23 @@ describe("materials: Bricks, Soil, Other", () => {
     expect(row({ material: "Other", customMaterial: "other", quantity: "3" }).errors.customMaterial).toMatch(/not Other/);
     expect(row({ material: "Other", customMaterial: "x".repeat(41), quantity: "3" }).errors.customMaterial).toMatch(/too long/);
   });
-  it("only Bricks, Soil and Other can be chosen (no Sand / Cement / Stone for new entries)", () => {
-    for (const old of ["Sand", "Cement", "Stone", ""]) expect(row({ material: old }).errors.material).toBeTruthy();
+  it("the dropdown offers Bricks, Sand, Stone, Khadi Matti, Grawal, Hard Murram, Soil and Other (Tinoda is a place, not a material)", () => {
+    expect(MATERIAL_CHOICES).toEqual(["Bricks", "Sand", "Stone", "Khadi Matti", "Grawal", "Hard Murram", "Soil", "Other"]);
+    for (const old of ["Cement", "Tinoda", ""]) expect(row({ material: old, quantity: "3" }).errors.material).toBeTruthy();
+  });
+  it("every standard material saves under its own name; only Bricks is counted in bricks, the rest in tonnes", () => {
+    for (const m of ["Sand", "Stone", "Khadi Matti", "Grawal", "Hard Murram", "Soil"]) {
+      const { value, errors } = row({ material: m, quantity: "4.5" });
+      expect(errors).toEqual({});
+      expect([value.material, value.quantity, value.unit]).toEqual([m, 4.5, "tonnes"]);
+      expect(row({ material: m, quantity: "4.555" }).errors.quantity).toBeTruthy();
+    }
+    expect(row({ material: "Bricks", quantity: "1500" }).value).toMatchObject({ material: "Bricks", unit: "bricks" });
+  });
+  it("a listed material cannot be typed under Other", () => {
+    expect(row({ material: "Other", customMaterial: "sand", quantity: "3" }).errors.customMaterial).toMatch(/Choose Sand/);
+    expect(row({ material: "Other", customMaterial: "KHADI MATTI", quantity: "3" }).errors.customMaterial).toMatch(/Choose Khadi Matti/);
+    expect(row({ material: "Other", customMaterial: "Tinoda", quantity: "3" }).errors.customMaterial).toBeUndefined(); // allowed as a typed name, just not offered
   });
   it("Other is always checked as tonnes, even before / without a valid name", () => {
     const r = row({ material: "Other", customMaterial: "", quantity: "3.5" });
@@ -287,7 +302,9 @@ describe("materials: Bricks, Soil, Other", () => {
     expect(materialChoiceOf("Bricks")).toBe("Bricks");
     expect(materialChoiceOf("Soil")).toBe("Soil");
     expect(materialChoiceOf("Stone Dust")).toBe("Other");
-    expect(materialChoiceOf("Sand")).toBe("Other"); // older record
+    expect(materialChoiceOf("Sand")).toBe("Sand");
+    expect(materialChoiceOf("Hard Murram")).toBe("Hard Murram");
+    expect(materialChoiceOf("Cement")).toBe("Other"); // older record, kept as saved
   });
   it("reuses an existing spelling that differs only by capitals", () => {
     expect(matchKnownMaterial("stone dust", ["Fly Ash", "Stone Dust"])).toBe("Stone Dust");
@@ -312,9 +329,9 @@ describe("materials: Bricks, Soil, Other", () => {
     ],
     trucks
   );
-  it("filters list Bricks and Soil first, then every other saved name", () => {
-    expect(knownMaterials(data)).toEqual(["Stone Dust", "Fly Ash", "Sand"]);
-    expect(materialFilterOptions(data).slice(0, 2)).toEqual(["Bricks", "Soil"]);
+  it("filters list the standard materials first, then every other saved name", () => {
+    expect(knownMaterials(data)).toEqual(["Stone Dust", "Fly Ash"]);
+    expect(materialFilterOptions(data).slice(0, 7)).toEqual(["Bricks", "Sand", "Stone", "Khadi Matti", "Grawal", "Hard Murram", "Soil"]);
   });
   it("filters and searches by the actual custom name", () => {
     expect(filterPheeras(data, { material: "Stone Dust" }).map((r) => r.id)).toEqual(["d1", "d2"]);

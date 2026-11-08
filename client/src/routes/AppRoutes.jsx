@@ -1,10 +1,9 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import MainLayout from "../layouts/MainLayout";
+import PagePlaceholder from "../components/common/PagePlaceholder";
 import { Button, EmptyState } from "../components/ui";
-import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute";
 import DesignPreview from "../pages/DesignPreview";
 import Dashboard from "../pages/Dashboard";
-import Login from "../pages/Login";
 import LabourManagement from "../pages/LabourManagement";
 import LabourProfile from "../pages/LabourProfile";
 import Attendance from "../pages/Attendance";
@@ -13,6 +12,9 @@ import Payments from "../pages/Payments";
 import Reports from "../pages/Reports";
 import Salary from "../pages/Salary";
 import Settings from "../pages/Settings";
+import Bills from "../pages/Bills";
+import BillDetail from "../pages/BillDetail";
+import BillEditor from "../pages/BillEditor";
 import Trucks from "../pages/Trucks";
 import TruckDetail from "../pages/TruckDetail";
 import PatlavaleProduction from "../pages/PatlavaleProduction";
@@ -23,8 +25,8 @@ import PatlavaleProduction from "../pages/PatlavaleProduction";
 import Payments from "../pages/Payments";
  *   <Route path="attendance" element={<Attendance />} />
  *
- * Auth: every page inside <MainLayout /> is behind <ProtectedRoute> (not signed in -> /login); "/login" sends an
- * already signed-in user to the app (<PublicOnlyRoute>).
+ * Auth phase: wrap the <MainLayout /> route in a <ProtectedRoute> and
+ * redirect "/login" to "/dashboard" when already signed in.
  */
 
 function NotFound() {
@@ -47,28 +49,28 @@ export default function AppRoutes() {
   return (
     <Routes>
       {/* Public (no layout) */}
-      <Route element={<PublicOnlyRoute />}>
-        <Route path="/login" element={<Login />} />
-      </Route>
+      <Route path="/login" element={<PagePlaceholder title="Login" />} />
       {import.meta.env.DEV && <Route path="/design-preview" element={<DesignPreview />} />}
 
-      {/* App (sidebar / header / bottom nav): requires a login */}
-      <Route element={<ProtectedRoute />}>
-        <Route element={<MainLayout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="labours" element={<LabourManagement />} />
-          <Route path="labours/:id" element={<LabourProfile />} />
-          <Route path="attendance" element={<Attendance />} />
-          <Route path="payments" element={<Payments />} />
-          <Route path="maapvali-work" element={<MaapvaliWork />} />
-          <Route path="patlavale-production" element={<PatlavaleProduction />} />
-          <Route path="salary" element={<Salary />} />
-          <Route path="trucks" element={<Trucks />} />
-          <Route path="trucks/:id" element={<TruckDetail />} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
+      {/* App (sidebar / header / bottom nav) */}
+      <Route element={<MainLayout />}>
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<Dashboard />} />
+        <Route path="labours" element={<LabourManagement />} />
+        <Route path="labours/:id" element={<LabourProfile />} />
+        <Route path="attendance" element={<Attendance />} />
+        <Route path="payments" element={<Payments />} />
+        <Route path="maapvali-work" element={<MaapvaliWork />} />
+        <Route path="patlavale-production" element={<PatlavaleProduction />} />
+        <Route path="salary" element={<Salary />} />
+        <Route path="trucks" element={<Trucks />} />
+        <Route path="trucks/:id" element={<TruckDetail />} />
+        <Route path="bills" element={<Bills />} />
+        <Route path="bills/new" element={<BillEditor />} />
+        <Route path="bills/:id" element={<BillDetail />} />
+        <Route path="bills/:id/edit" element={<BillEditor />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

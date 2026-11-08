@@ -1,8 +1,10 @@
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Cog, ListChecks, Info, UserRound } from "lucide-react";
 import { Card, CardBody } from "../components/ui";
+import InvoiceSettingsSection from "../features/settings/InvoiceSettingsSection";
 import SettingsSection from "../features/settings/SettingsSection";
-import { roleLabel } from "../features/auth/authState";
-import useAuth from "../features/auth/useAuth";
+import { dashboardData } from "../mock/dashboard";
 import { ACCOUNTING_POLICY } from "../utils/accountCalculations";
 import { BRICKS_PER_MAAP, PAYABLE_BRICKS_PER_MAAP } from "../utils/labourTypes";
 import { DRIVERS_LINKED_TO_LABOUR } from "../utils/truckStatus";
@@ -16,13 +18,19 @@ const yesNo = (value, yes, no) => (value ? yes : no);
  * An editable setting is added only when the client confirms it is needed.
  */
 export default function Settings() {
-  const { user } = useAuth();
+  const { owner } = dashboardData;
+  const { hash } = useLocation();
+
+  // /settings#invoice-settings (from the bill form) scrolls to the invoice details
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" });
+  }, [hash]);
 
   return (
     <div className="space-y-4 sm:space-y-5">
       <div>
         <h1 className="type-page-heading">Settings</h1>
-        <p className="mt-1 text-sm text-fg-muted">The rules Aayush Carting uses today. Nothing here is editable yet.</p>
+        <p className="mt-1 text-sm text-fg-muted">The rules Aayush Carting uses today. Only Invoice / Business Details (below) can be edited; the rest is not editable yet.</p>
       </div>
 
       <Card>
@@ -41,9 +49,8 @@ export default function Settings() {
         title="Account"
         icon={UserRound}
         rows={[
-          { label: "Name", value: user?.name },
-          { label: "Email", value: user?.email },
-          { label: "Role", value: roleLabel(user?.role) },
+          { label: "Name", value: owner.fullName },
+          { label: "Role", value: owner.role },
         ]}
       />
 
@@ -92,6 +99,8 @@ export default function Settings() {
           { label: "Maaps entered as", value: "Whole numbers of 1 or more (default)", status: "waiting" },
         ]}
       />
+
+      <InvoiceSettingsSection />
 
       <SettingsSection
         title="About"

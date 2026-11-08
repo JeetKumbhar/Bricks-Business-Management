@@ -87,14 +87,14 @@ export const paginate = (rows, page, pageSize) => {
   return { items: rows.slice((current - 1) * pageSize, current * pageSize), page: current, pageCount, total: rows.length };
 };
 
-/** Material names saved so far that are not Bricks / Soil (typed names and older records), most used first. */
+/** Material names saved so far that are not in the standard list (typed names and older records), most used first. */
 export const knownMaterials = (rows) => {
   const counts = new Map();
   for (const r of rows) if (!STANDARD_MATERIALS.includes(r.material)) counts.set(r.material, (counts.get(r.material) ?? 0) + 1);
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name);
 };
 
-/** What the material FILTER lists: Bricks, Soil, then every other name found in the data. */
+/** What the material FILTER lists: the standard materials, then every other name found in the data. */
 export const materialFilterOptions = (rows) => [...STANDARD_MATERIALS, ...knownMaterials(rows)];
 
 /** Destinations used before, most used first (for the suggestion list). */
