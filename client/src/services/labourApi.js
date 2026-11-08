@@ -68,6 +68,10 @@ export async function loadAllData({ signal } = {}) {
   return { labours, attendance, maapEntries, productionEntries, seasons, payments, rateChanges: rateLists.flat() };
 }
 
+/** Used as a safety net after a create whose answer did not carry a usable id (see LabourContext). */
+export const loadPayments = ({ signal } = {}) => fetchAllPages("/payments", { includeDeleted: true }, { signal });
+export const loadSeasons = async ({ signal } = {}) => (await api.get("/seasons", { signal })).data;
+
 // ---- Labour --------------------------------------------------------------------------------------------------------
 
 const EDITABLE_FIELDS = ["name", "mobile", "village", "joiningDate", "status"];

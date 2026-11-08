@@ -5,7 +5,7 @@ import useLabours from "../labours/useLabours";
  * Payment history for every recipient (workers of all types and Patlavale teams), joined with the recipient's
  * name and labour type, plus the add / correct / delete actions.
  * `labours` is every labour record, so the recipient picker can search individuals and teams together.
- * Backed by LabourProvider (in-memory mock) for now.
+ * Backed by LabourProvider, which reads and writes the server.
  */
 export default function usePayments() {
   const { allLabours, allPayments, deletedPayments, addPayment, updatePayment, deletePayment } = useLabours();

@@ -141,7 +141,7 @@ export const createPayment = async (input, actor, now = new Date()) => {
       createdBy: actorId,
       updatedBy: actorId,
     });
-    return { payment: toDetailDto(created.toObject()), replayed: false };
+    return { payment: toDetailDto(created.toObject({ transform: false })), replayed: false };
   } catch (err) {
     if (isDuplicateKey(err) && requestId) {
       const again = await replay(); // two copies of the same request raced; the loser gets the winner's payment

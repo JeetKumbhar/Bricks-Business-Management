@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { Button, ConfirmDialog, useToast } from "../components/ui";
 import DeletedPaymentsCard from "../features/payments/DeletedPaymentsCard";
@@ -9,6 +9,8 @@ import PaymentRevisionsModal from "../features/payments/PaymentRevisionsModal";
 import { filterPayments, sumAmount, sumSince } from "../features/payments/paymentSelectors";
 import PaymentSummaryTiles from "../features/payments/PaymentSummaryTiles";
 import usePayments from "../features/payments/usePayments";
+import { getErrorMessage } from "../services/api";
+import { getPaymentDetail, makeRequestId } from "../services/paymentApi";
 import { formatCurrency } from "../utils/formatCurrency";
 import { addDaysISO, formatDate, toISODate } from "../utils/formatDate";
 import { PAYMENT_TYPES } from "../utils/paymentTypes";
@@ -29,6 +31,8 @@ export default function Payments() {
   const [form, setForm] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [viewingChanges, setViewingChanges] = useState(null);
+  const [saving, setSaving] = useState(false); // a request is in flight: blocks a second click
+  const requestIdRef = useRef(null); // one id per "Add payment" window: a retry or double click can never record it twice
 
   const today = toISODate();
   const searched = useMemo(() => filterPayments(history, { search }), [history, search]);
@@ -62,45 +66,57 @@ export default function Payments() {
     setPage(1);
   };
 
-  // Payments are shown from the server, but saving them is connected in the payments module. Until then a save is refused
-  // with a clear message instead of keeping a payment only in this browser tab.
-  const guard = (action) => {
+  // Every change is saved on the server first. The window closes and "saved" shows only after the server confirms; on a failure
+  // the window stays open with everything typed, and the server's reason is shown.
+  const runRequest = async (action, failure) => {
+    if (saving) return;
+    setSaving(true);
     try {
-      action();
+      await action();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save the payment.");
+      toast.error(getErrorMessage(err, failure));
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleSubmit = (values) => guard(() => {
-    const recipientName = labours.find((l) => l.id === values.labourId)?.name ?? values.labourId;
+  const openAdd = () => {
+    requestIdRef.current = makeRequestId();
+    setForm({ payment: null });
+  };
 
-    if (form.payment) {
-      updatePayment(
-        form.payment.id,
-        { type: values.type, amount: values.amount, date: values.date, note: values.note },
-        values.reason
-      );
-      toast.success("Payment corrected");
-    } else {
-      addPayment({
-        labourId: values.labourId,
-        type: values.type,
-        amount: values.amount,
-        date: values.date,
-        note: values.note,
-      });
-      setPage(1);
-      toast.success(`${formatCurrency(values.amount)} recorded for ${recipientName}`);
+  const handleSubmit = (values) =>
+    runRequest(async () => {
+      const recipientName = labours.find((l) => l.id === values.labourId)?.name ?? values.labourId;
+
+      if (form.payment) {
+        await updatePayment(form.payment.id, { type: values.type, amount: values.amount, date: values.date, note: values.note }, values.reason);
+        toast.success("Payment corrected");
+      } else {
+        await addPayment({ labourId: values.labourId, type: values.type, amount: values.amount, date: values.date, note: values.note }, requestIdRef.current);
+        requestIdRef.current = null;
+        setPage(1);
+        toast.success(`${formatCurrency(values.amount)} recorded for ${recipientName}`);
+      }
+      setForm(null);
+    }, "Could not save the payment. Nothing was saved.");
+
+  const handleDelete = (reason) =>
+    runRequest(async () => {
+      await deletePayment(deleting.id, reason);
+      toast.success("Payment deleted. It stays on record.");
+      setDeleting(null);
+    }, "Could not delete the payment. Nothing was changed.");
+
+  // The list does not carry the correction trail; it is read from the server when "View changes" is opened.
+  const handleViewChanges = async (payment) => {
+    try {
+      const detail = await getPaymentDetail(payment.id);
+      setViewingChanges({ ...payment, ...detail, labourName: payment.labourName, labourType: payment.labourType });
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Could not load the changes."));
     }
-    setForm(null);
-  });
-
-  const handleDelete = (reason) => guard(() => {
-    deletePayment(deleting.id, reason);
-    toast.success("Payment deleted. It stays on record.");
-    setDeleting(null);
-  });
+  };
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -111,15 +127,10 @@ export default function Payments() {
             Bayana, salary payments and other money given to workers and Patlavale teams.
           </p>
         </div>
-        <Button leftIcon={Plus} onClick={() => setForm({ payment: null })} className="hidden self-start sm:inline-flex">
+        <Button leftIcon={Plus} onClick={openAdd} className="hidden self-start sm:inline-flex">
           Add Payment
         </Button>
       </div>
-
-      <p role="note" className="rounded-lg bg-warning-soft px-3 py-2.5 text-sm text-amber-900">
-        Payment history is read from the server. <strong>Adding, correcting or deleting a payment is not connected to the server yet</strong>, so it is
-        switched off until the payments step. Nothing you try here is saved.
-      </p>
 
       <PaymentSummaryTiles today={paidToday} last7Days={paidLast7} shown={sumAmount(filtered)} />
 
@@ -131,7 +142,7 @@ export default function Payments() {
         onPageChange={setPage}
         onEdit={(payment) => setForm({ payment })}
         onDelete={setDeleting}
-        onViewChanges={setViewingChanges}
+        onViewChanges={handleViewChanges}
         hasFilters={hasFilters}
         onClearFilters={clearFilters}
       />
@@ -142,13 +153,13 @@ export default function Payments() {
       <button
         type="button"
         aria-label="Add payment"
-        onClick={() => setForm({ payment: null })}
+        onClick={openAdd}
         className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white shadow-pop transition-transform active:scale-95 sm:hidden"
       >
         <Plus className="h-6 w-6" aria-hidden="true" />
       </button>
 
-      <PaymentFormModal open={Boolean(form)} payment={form?.payment ?? null} labours={labours} onClose={() => setForm(null)} onSubmit={handleSubmit} />
+      <PaymentFormModal open={Boolean(form)} payment={form?.payment ?? null} labours={labours} onClose={() => setForm(null)} onSubmit={handleSubmit} saving={saving} />
 
       <PaymentRevisionsModal payment={viewingChanges} onClose={() => setViewingChanges(null)} />
 
@@ -164,6 +175,7 @@ export default function Payments() {
         confirmText="Delete"
         requireReason
         reasonLabel="Reason for deleting"
+        loading={saving}
         onConfirm={handleDelete}
         onCancel={() => setDeleting(null)}
       />

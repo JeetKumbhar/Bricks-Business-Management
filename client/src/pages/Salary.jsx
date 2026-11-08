@@ -1,8 +1,10 @@
 import { Download } from "lucide-react";
-import { Button, useToast } from "../components/ui";
+import { WifiOff } from "lucide-react";
+import { Button, EmptyState, LoadingState, useToast } from "../components/ui";
 import PeriodSelector from "../features/accounts/PeriodSelector";
 import usePeriod from "../features/accounts/usePeriod";
-import usePeriodAccounts from "../features/accounts/usePeriodAccounts";
+import SalaryReconciliation from "../features/salary/SalaryReconciliation";
+import useServerSalary from "../features/salary/useServerSalary";
 import SalaryTable from "../features/salary/SalaryTable";
 import SalaryTypeSummary from "../features/salary/SalaryTypeSummary";
 import SettlementNotice from "../features/salary/SettlementNotice";
@@ -15,12 +17,13 @@ const CSV_HEADERS = ["Labour ID", "Name", "Type", "Work in range", "Earned (rang
 /**
  * Salary: earned, received and outstanding balances by labour type for ANY date range.
  * There is no fixed salary week. Outstanding is season to date and is never reset by a payment.
- * Prototype calculations: final financial calculations belong to the backend.
+ * Every figure is calculated by the server (GET /api/salary). The screen only shows them, and checks them against the
+ * figures the rest of the app works out from its records (SalaryReconciliation).
  */
 export default function Salary() {
   const toast = useToast();
   const { today, preset, setPreset, custom, setCustom, period } = usePeriod("LAST7");
-  const { rows, summary } = usePeriodAccounts(period.start, period.end);
+  const { status, rows, summary, error, retry } = useServerSalary(period.start, period.end);
 
   const handleExport = () => {
     const body = rows.map((r) => [
@@ -43,7 +46,7 @@ export default function Salary() {
           <h1 className="type-page-heading">Salary</h1>
           <p className="mt-1 text-sm text-fg-muted">Earned, received and outstanding balances for any date range.</p>
         </div>
-        <Button variant="outline" leftIcon={Download} onClick={handleExport} disabled={rows.length === 0} className="hidden sm:inline-flex">
+        <Button variant="outline" leftIcon={Download} onClick={handleExport} disabled={status !== "ready" || rows.length === 0} className="hidden sm:inline-flex">
           Export
         </Button>
       </div>
@@ -57,17 +60,34 @@ export default function Salary() {
         period={period}
       />
 
-      <SalaryTypeSummary summary={summary} />
+      {status === "loading" && <LoadingState label="Loading salary figures..." />}
 
-      <Button variant="outline" leftIcon={Download} onClick={handleExport} disabled={rows.length === 0} fullWidth className="sm:hidden">
-        Export to CSV
-      </Button>
+      {status === "error" && (
+        <EmptyState
+          icon={WifiOff}
+          title="Could not load the salary figures"
+          description={`${error} Nothing has been changed.`}
+          action={<Button onClick={retry}>Try again</Button>}
+        />
+      )}
 
-      <SalaryTable key={`${period.start}|${period.end}`} rows={rows} />
+      {summary && status === "ready" && (
+        <>
+          <SalaryTypeSummary summary={summary} />
+
+          <Button variant="outline" leftIcon={Download} onClick={handleExport} disabled={rows.length === 0} fullWidth className="sm:hidden">
+            Export to CSV
+          </Button>
+
+          <SalaryTable key={`${period.start}|${period.end}`} rows={rows} />
+
+          <SalaryReconciliation serverRows={rows} />
+        </>
+      )}
 
       <SettlementNotice />
 
-      <p className="type-small">Prototype calculation. Final salary figures are calculated by the server.</p>
+      <p className="type-small">Salary figures are calculated by the server from the saved attendance, work, production and payments.</p>
     </div>
   );
 }

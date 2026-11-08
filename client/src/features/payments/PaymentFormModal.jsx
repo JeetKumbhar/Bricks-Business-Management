@@ -7,7 +7,7 @@ const FORM_ID = "payment-form";
  * Add a payment (payment = null) or correct one (payment = the record).
  * The form mounts only while the modal is open, so it resets every time.
  */
-export default function PaymentFormModal({ open, payment, labours, onClose, onSubmit }) {
+export default function PaymentFormModal({ open, payment, labours, onClose, onSubmit, saving = false }) {
   const isEdit = Boolean(payment);
 
   return (
@@ -19,10 +19,10 @@ export default function PaymentFormModal({ open, payment, labours, onClose, onSu
       description={isEdit ? "Correct the details of this payment." : "Record money given to a labour."}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form={FORM_ID}>
+          <Button type="submit" form={FORM_ID} loading={saving}>
             {isEdit ? "Save Changes" : "Save Payment"}
           </Button>
         </>

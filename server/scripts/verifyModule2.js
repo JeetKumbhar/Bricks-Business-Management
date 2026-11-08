@@ -123,6 +123,7 @@ const main = async () => {
   if (!season) {
     const made = await call("POST", "/seasons", { name: `ZZ M2 TEST season ${stamp}`, startDate: day(30) });
     check("no season covered today: created one", made.status === 201, made.message);
+    check("the new season comes back with its real 24-character id", /^[0-9a-f]{24}$/.test(String(made.data?.id)), made.data?.id);
     season = made.data;
   } else console.log(`  using existing season "${season.name}"`);
   if (season?.status === "CLOSED") console.log("  season is CLOSED: Patlavale checks skipped (reopen it or use another database)");

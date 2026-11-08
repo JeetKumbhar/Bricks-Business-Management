@@ -22,7 +22,8 @@ export default function PaymentHistory({ payments, page, onPageChange, onEdit, o
   const rows = payments.slice(start, start + PAGE_SIZE);
   const showing = total === 0 ? "No results" : `Showing ${start + 1}-${start + rows.length} of ${total}`;
 
-  const corrected = (p) => (p.revisions?.length ?? 0) > 0;
+  // the list from the server says `corrected`; a payment just corrected here also carries its `revisions`
+  const corrected = (p) => Boolean(p.corrected) || (p.revisions?.length ?? 0) > 0;
 
   const columns = [
     { key: "date", header: "Date", render: (p) => formatDate(p.date) },

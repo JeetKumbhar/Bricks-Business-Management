@@ -2,22 +2,20 @@ import { createContext, useCallback, useEffect, useMemo, useRef, useState } from
 import { buildWorkerStats, enrichAttendance, groupBy, sortRatesAsc } from "../features/labours/labourStats";
 import { changedCount, removeById, replaceDay, replaceForLabour, upsertById } from "../features/labours/labourDataOps";
 import * as labourApi from "../services/labourApi";
+import * as paymentApi from "../services/paymentApi";
 import { getErrorMessage } from "../services/api";
 import { LABOUR_TYPES } from "../utils/labourTypes";
 
 export const LabourContext = createContext(null);
 
+// A saved record always has a 24-character id. If a create ever answers without one, the record is saved but the answer cannot be
+// trusted to carry it, so the list is read again from the server instead of being patched with a half-empty record.
+const hasRealId = (record) => /^[0-9a-f]{24}$/.test(String(record?.id));
+
 const EMPTY = Object.freeze({ labours: [], attendance: [], maapEntries: [], productionEntries: [], payments: [], rateChanges: [], seasons: [] });
 
-// Payments are connected to the backend in their own module. Until then the payment history is shown from the server
-// (read-only, so every balance is right) and nothing here pretends to save a payment.
-const PAYMENTS_NOT_CONNECTED = "Recording or changing payments is not connected to the server yet. Nothing was saved.";
-const refusePaymentWrite = () => {
-  throw new Error(PAYMENTS_NOT_CONNECTED);
-};
-
 /**
- * The shared store for labour, attendance, Maapvali work, Patlavale production, rates, seasons and payments (read-only).
+ * The shared store for labour, attendance, Maapvali work, Patlavale production, rates, seasons and payments.
  * Every record comes from the backend (MongoDB). Nothing is invented and there is no sample-data fallback: while loading
  * `status` is "loading", and if the server cannot be read it is "error" (with `reload`), never a half-filled screen.
  * Every change is sent to the server first; the lists are updated from the server's answer, so what is on screen is what
@@ -28,6 +26,7 @@ export function LabourProvider({ children }) {
   const [status, setStatus] = useState("loading"); // loading | ready | error
   const [loadError, setLoadError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const [dataVersion, setDataVersion] = useState(0); // goes up on every successful change, so figures calculated elsewhere (Salary) know to refresh
   const [ratesLoaded, setRatesLoaded] = useState(() => new Set()); // labour ids whose rate history is in `rateChanges`
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -56,7 +55,10 @@ export function LabourProvider({ children }) {
     setAttempt((n) => n + 1);
   }, []);
 
-  const patch = useCallback((key, updater) => setData((prev) => ({ ...prev, [key]: updater(prev[key]) })), []);
+  const patch = useCallback((key, updater) => {
+    setData((prev) => ({ ...prev, [key]: updater(prev[key]) }));
+    setDataVersion((n) => n + 1);
+  }, []);
 
   const { attendanceBy, paymentsBy, ratesBy, maapBy, productionBy } = useMemo(() => {
     const ratesGrouped = groupBy(data.rateChanges, "labourId");
@@ -177,7 +179,44 @@ export function LabourProvider({ children }) {
     [patch]
   );
 
-  // ---- Payments (read-only until the payments module) -----------------------------------------------------------------
+  // ---- Payments -----------------------------------------------------------------------------------------------------
+
+  /**
+   * values: { labourId, type, amount, date, note }. requestId: made once per "Add payment" window (makeRequestId), so a retry or a
+   * double click can never record the payment twice. Resolves the saved payment.
+   */
+  const addPayment = useCallback(
+    async (values, requestId) => {
+      const payment = await paymentApi.createPaymentRequest(values, requestId);
+      if (hasRealId(payment)) patch("payments", (list) => upsertById(list, payment));
+      else {
+        const fresh = await labourApi.loadPayments();
+        patch("payments", () => fresh);
+      }
+      return payment;
+    },
+    [patch]
+  );
+
+  /** Correct type, amount, date and note. The recipient never changes. The server keeps the old values and the reason. */
+  const updatePayment = useCallback(
+    async (id, changes, reason) => {
+      const payment = await paymentApi.correctPaymentRequest(id, changes, reason);
+      patch("payments", (list) => upsertById(list, payment));
+      return payment;
+    },
+    [patch]
+  );
+
+  /** "Delete" = void: the payment stays on record (with who, when and why) and no balance counts it. */
+  const deletePayment = useCallback(
+    async (id, reason) => {
+      const payment = await paymentApi.voidPaymentRequest(id, reason);
+      patch("payments", (list) => upsertById(list, payment));
+      return payment;
+    },
+    [patch]
+  );
 
   const byNewest = (a, b) => b.date.localeCompare(a.date) || (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
 
@@ -273,7 +312,11 @@ export function LabourProvider({ children }) {
   const createSeason = useCallback(
     async (input) => {
       const season = await labourApi.createSeasonRequest(input);
-      patch("seasons", (list) => upsertById(list, season));
+      if (hasRealId(season)) patch("seasons", (list) => upsertById(list, season));
+      else {
+        const fresh = await labourApi.loadSeasons();
+        patch("seasons", () => fresh);
+      }
       return season;
     },
     [patch]
@@ -296,6 +339,7 @@ export function LabourProvider({ children }) {
       status,
       loadError,
       reload,
+      dataVersion,
       labours,
       allLabours,
       addLabour,
@@ -312,10 +356,9 @@ export function LabourProvider({ children }) {
       getPayments,
       allPayments,
       deletedPayments,
-      paymentsConnected: false,
-      addPayment: refusePaymentWrite,
-      updatePayment: refusePaymentWrite,
-      deletePayment: refusePaymentWrite,
+      addPayment,
+      updatePayment,
+      deletePayment,
       allMaapEntries,
       getMaapEntries,
       updateMaapEntry,
@@ -330,7 +373,7 @@ export function LabourProvider({ children }) {
       createSeason,
       getRateHistory,
     }),
-    [status, loadError, reload, labours, allLabours, addLabour, updateLabour, isMobileTaken, changeRate, loadRateHistory, isRateHistoryLoaded, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, deletedPayments, allMaapEntries, getMaapEntries, updateMaapEntry, deleteMaapEntry, saveMaapDay, allProductionEntries, saveProductionDay, updateProductionEntry, deleteProductionEntry, data.seasons, seasonForDate, createSeason, getRateHistory]
+    [status, loadError, reload, dataVersion, labours, allLabours, addLabour, updateLabour, isMobileTaken, changeRate, loadRateHistory, isRateHistoryLoaded, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, deletedPayments, addPayment, updatePayment, deletePayment, allMaapEntries, getMaapEntries, updateMaapEntry, deleteMaapEntry, saveMaapDay, allProductionEntries, saveProductionDay, updateProductionEntry, deleteProductionEntry, data.seasons, seasonForDate, createSeason, getRateHistory]
   );
 
   return <LabourContext.Provider value={value}>{children}</LabourContext.Provider>;

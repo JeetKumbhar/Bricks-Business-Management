@@ -43,7 +43,7 @@ export const createSeason = async ({ name, startDate, endDate = null }, actor) =
   assertNoOverlap(await listSeasonRows(), { startDate, endDate });
   try {
     const created = await Season.create({ name, startDate, endDate, status: SEASON_STATUS.OPEN, revision: 1, createdBy: actor.id ?? null, updatedBy: actor.id ?? null });
-    return toSeasonDto(created.toObject());
+    return toSeasonDto(created.toObject({ transform: false }));
   } catch (err) {
     if (isDuplicateKey(err)) throw fieldError(409, "A season with this name already exists", "name");
     throw err;
