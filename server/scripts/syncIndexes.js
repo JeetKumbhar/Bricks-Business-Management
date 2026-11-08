@@ -11,6 +11,7 @@ import { connectDB, describeTarget, disconnectDB } from "../config/db.js";
 import { env } from "../config/env.js";
 import "../models/Attendance.js";
 import "../models/Counter.js";
+import "../models/Customer.js";
 import "../models/Labour.js";
 import "../models/LabourRateHistory.js";
 import "../models/MaapEntry.js";

@@ -51,6 +51,7 @@ export const explainConnectionError = (err) => {
 
 let listenersAttached = false;
 let everConnected = false;
+let closingOnPurpose = false; // set by disconnectDB so a deliberate shutdown is not reported as a lost connection
 const attachListeners = () => {
   if (listenersAttached) return;
   listenersAttached = true;
@@ -59,9 +60,10 @@ const attachListeners = () => {
   // Before the first success a failure is reported once, by connectDB, so these stay quiet then.
   connection.on("connected", () => {
     everConnected = true;
+    closingOnPurpose = false;
   });
   connection.on("disconnected", () => {
-    if (everConnected) console.warn("[db] lost the connection to MongoDB (the driver will keep trying to reconnect)");
+    if (everConnected && !closingOnPurpose) console.warn("[db] lost the connection to MongoDB (the driver will keep trying to reconnect)");
   });
   connection.on("reconnected", () => console.log("[db] reconnected to MongoDB"));
   connection.on("error", (err) => {
@@ -98,7 +100,14 @@ export async function connectDB(uri = env.mongodbUri) {
 }
 
 export async function disconnectDB() {
-  if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
+  if (mongoose.connection.readyState === 0) return;
+  closingOnPurpose = true; // cleared again on the next "connected" event, so a later unexpected drop still warns
+  try {
+    await mongoose.disconnect();
+  } catch (err) {
+    closingOnPurpose = false; // the close failed: do not hide what happens next
+    throw err;
+  }
 }
 
 /** Current state for the health check. `ping` asks the server, so a half-open connection is not reported as healthy. */

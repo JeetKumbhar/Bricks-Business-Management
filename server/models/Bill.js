@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { PRICING_UNIT, PRICING_UNIT_VALUES } from "../constants/billing.js";
 import { BILL_HISTORY, BILL_STATUS, BILL_STATUS_VALUES, LIMITS, TAX_MODE, TAX_MODE_VALUES, TAX_TYPE } from "../constants/bill.js";
 import { businessDateField, createSchema, moneyField, softDeleteFields } from "../utils/schema.js";
 
@@ -8,6 +9,12 @@ import { businessDateField, createSchema, moneyField, softDeleteFields } from ".
 //  - CANCELLED: a finalized bill that was cancelled with a reason. Keeps its number and all its data; the number is never reused.
 // The totals are always recalculated by the server; the client's numbers are never stored.
 const line = { type: String, trim: true, default: "" };
+
+// Display copy of the Pheera a line came from (read only; the Pheera itself is the source of truth).
+const sourceSchema = new mongoose.Schema(
+  { pheeraNo: Number, truckNumber: String, businessDate: String, materialName: String, destination: String, quantity: Number, unit: String },
+  { _id: false }
+);
 
 const itemSchema = new mongoose.Schema(
   {
@@ -22,6 +29,10 @@ const itemSchema = new mongoose.Schema(
     sgstPaise: moneyField({ default: 0 }),
     igstPaise: moneyField({ default: 0 }),
     totalPaise: moneyField({ default: 0 }),
+    // Pheera lines only. PER_UNIT (default, every manual line) = rate per unit; PER_THOUSAND = rate per 1,000 (bricks).
+    pricingUnit: { type: String, enum: PRICING_UNIT_VALUES, default: PRICING_UNIT.PER_UNIT },
+    sourceTripId: { type: mongoose.Schema.Types.ObjectId, ref: "TruckTrip", default: null },
+    source: { type: sourceSchema, default: null },
   },
   { _id: false }
 );
@@ -60,6 +71,9 @@ const billSchema = createSchema({
     name: line, address: line, gstin: line, stateName: line, stateCode: line, contact: line,
   },
   customerKey: { type: String, default: "" }, // lower-case name, for search
+  customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null }, // null on manual bills typed by hand
+  sourceTripIds: { type: [mongoose.Schema.Types.ObjectId], default: [] }, // Pheeras on this bill (the Pheera's billId is authoritative)
+  requestId: { type: String, default: null }, // idempotency key of "generate from Pheeras"
   taxMode: { type: String, enum: TAX_MODE_VALUES, default: TAX_MODE.GST },
   taxType: { type: String, enum: [...Object.values(TAX_TYPE), null], default: null },
   taxPending: { type: Boolean, default: false },
@@ -89,5 +103,7 @@ const billSchema = createSchema({
 billSchema.index({ billNumber: 1 }, { unique: true, partialFilterExpression: { billNumber: { $type: "string" } } });
 billSchema.index({ billDate: -1, status: 1 });
 billSchema.index({ customerKey: 1 });
+billSchema.index({ requestId: 1 }, { unique: true, partialFilterExpression: { requestId: { $type: "string" } } });
+billSchema.index({ sourceTripIds: 1 });
 
 export default mongoose.models.Bill || mongoose.model("Bill", billSchema);

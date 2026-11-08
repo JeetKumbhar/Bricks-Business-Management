@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_TRIPS_PER_BILL_REQUEST } from "../constants/billing.js";
 import { BILL_STATUS_VALUES, GSTIN_PATTERN, HSN_PATTERN, LIMITS, MAX_ITEMS_PER_BILL, MAX_QUANTITY_MILLI, MAX_RATE_PAISE, MAX_TAX_RATE_BP, PHONE_PATTERN, STATE_CODE_PATTERN, TAX_MODE_VALUES } from "../constants/bill.js";
 import { gstinMatchesState, parseBp, parseMilli, parseRupeesToPaise } from "../utils/billRules.js";
 import { isValidBusinessDate } from "../utils/dates.js";
@@ -21,6 +22,7 @@ const item = z.strictObject({
   unit: text(LIMITS.unit, "Unit").optional(),
   rate: rate.optional(),
   taxRate: taxRate.optional(),
+  sourceTripId: z.string().regex(/^[0-9a-f]{24}$/, "Not a valid Pheera id").optional(), // identifies an existing Pheera line of THIS draft; verified by the server
 });
 
 const customer = z
@@ -36,6 +38,7 @@ const customer = z
     if (!gstinMatchesState(c.gstin, c.stateCode)) ctx.addIssue({ code: "custom", path: ["stateCode"], message: "The first 2 digits of the GSTIN must match the state code" });
   });
 
+const customerId = z.string().regex(/^[0-9a-f]{24}$/, "Not a valid customer id");
 const fields = {
   billDate: businessDate,
   customer,
@@ -47,9 +50,9 @@ const reason = z.string().trim().min(3, "Please give a reason").max(LIMITS.reaso
 const revision = z.number().int().positive();
 
 export const idParamsSchema = z.strictObject({ id: z.string().regex(/^[0-9a-f]{24}$/, "Not a valid bill id") });
-export const createBillSchema = z.strictObject({ ...fields, billDate: fields.billDate.optional(), customer: fields.customer.optional(), taxMode: fields.taxMode.optional(), items: fields.items.optional(), notes: fields.notes.optional() });
+export const createBillSchema = z.strictObject({ ...fields, customerId: customerId.optional(), billDate: fields.billDate.optional(), customer: fields.customer.optional(), taxMode: fields.taxMode.optional(), items: fields.items.optional(), notes: fields.notes.optional() });
 export const updateBillSchema = z
-  .strictObject({ billDate: fields.billDate.optional(), customer: fields.customer.optional(), taxMode: fields.taxMode.optional(), items: fields.items.optional(), notes: fields.notes.optional(), revision: revision.optional() })
+  .strictObject({ customerId: customerId.optional(), billDate: fields.billDate.optional(), customer: fields.customer.optional(), taxMode: fields.taxMode.optional(), items: fields.items.optional(), notes: fields.notes.optional(), revision: revision.optional() })
   .refine((b) => Object.keys(b).some((k) => k !== "revision"), { path: ["customer"], message: "Send at least one field to change" });
 export const finalizeSchema = z.strictObject({ reviewed: z.literal(true, { error: "Confirm that you have reviewed the bill and its tax treatment (reviewed: true)" }), revision: revision.optional() });
 export const cancelSchema = z.strictObject({ reason });
@@ -68,3 +71,10 @@ export const listQuerySchema = z.strictObject({
   if (q.from && q.to && q.to < q.from) ctx.addIssue({ code: "custom", path: ["to"], message: "to must be on or after from" });
 });
 export const pdfQuerySchema = z.strictObject({ download: z.enum(["0", "1"]).optional() });
+
+// Pheera <-> Bills. Strict; the server derives lines, amounts, customer and status itself.
+const tripId = z.string().regex(/^[0-9a-f]{24}$/, "Not a valid Pheera id");
+const tripIds = z.array(tripId).min(1, "Select at least one Pheera").max(MAX_TRIPS_PER_BILL_REQUEST, `At most ${MAX_TRIPS_PER_BILL_REQUEST} Pheeras at a time`);
+export const fromTripsSchema = z.strictObject({ tripIds, requestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/, "requestId must be 8 to 64 letters, digits, - or _") });
+export const addTripsSchema = z.strictObject({ tripIds, revision: revision.optional() });
+export const tripParamsSchema = z.strictObject({ id: z.string().regex(/^[0-9a-f]{24}$/, "Not a valid bill id"), tripId });

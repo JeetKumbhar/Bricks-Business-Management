@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 process.env.NODE_ENV = "test";
 
-const { connectDB, describeTarget, explainConnectionError, getDbStatus, redactUri } = await import("../config/db.js");
+const { connectDB, describeTarget, disconnectDB, explainConnectionError, getDbStatus, redactUri } = await import("../config/db.js");
 
 // Temporary own-property overrides on the connection object (its readyState / db / name are prototype getters).
 const overridden = [];
@@ -94,5 +94,51 @@ describe("getDbStatus", () => {
   it("reports unreachable when the connection looks open but the ping fails", async () => {
     withState(1, { admin: () => ({ ping: async () => { throw new Error("socket closed"); } }) });
     expect(await getDbStatus()).toEqual({ status: "unreachable" });
+  });
+});
+
+describe("disconnect warning", () => {
+  const connected = async () => {
+    vi.spyOn(mongoose, "connect").mockResolvedValue(mongoose);
+    await connectDB("mongodb://u:p@127.0.0.1:27017/x");
+    mongoose.connection.emit("connected");
+  };
+
+  it("still warns when the connection is lost unexpectedly", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await connected();
+    mongoose.connection.emit("disconnected");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("lost the connection to MongoDB"));
+  });
+
+  it("does not warn when disconnectDB closes the connection on purpose, and warns again after a later reconnect and drop", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await connected();
+    override("readyState", 1);
+    const close = vi.spyOn(mongoose, "disconnect").mockImplementation(async () => {
+      mongoose.connection.emit("disconnected");
+    });
+    await disconnectDB();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+    mongoose.connection.emit("connected"); // connected again later
+    mongoose.connection.emit("disconnected"); // then dropped unexpectedly
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps warning if the deliberate close itself fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await connected();
+    override("readyState", 1);
+    vi.spyOn(mongoose, "disconnect").mockRejectedValue(new Error("close failed"));
+    await expect(disconnectDB()).rejects.toThrow("close failed");
+    mongoose.connection.emit("disconnected");
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing when there is no connection to close", async () => {
+    const close = vi.spyOn(mongoose, "disconnect");
+    await disconnectDB();
+    expect(close).not.toHaveBeenCalled();
   });
 });

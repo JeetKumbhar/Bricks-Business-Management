@@ -1,10 +1,17 @@
+import { BILL_STATUS } from "../constants/bill.js";
+import { BILLING_ACTION, BILLING_STATUS, LOCKED_BILLING_STATUSES } from "../constants/billing.js";
+import { CUSTOMER_KIND } from "../constants/customer.js";
 import { MATERIAL_RULES, MATERIAL_CATEGORY } from "../constants/truck.js";
+import Bill from "../models/Bill.js";
+import Customer from "../models/Customer.js";
 import Truck from "../models/Truck.js";
 import TruckTrip from "../models/TruckTrip.js";
 import ApiError from "../utils/ApiError.js";
 import { isFutureBusinessDate, todayBusinessDate } from "../utils/dates.js";
 import { runInTransaction } from "../utils/transaction.js";
 import { normalizeText, quantityError, resolveTripMaterial, textKey, truckNumberKey } from "../utils/truckRules.js";
+import { assertCustomersActive } from "./customer.service.js";
+import { lockedError } from "./tripBilling.service.js";
 import { summarizeTrips } from "./truckTripCalculations.js";
 
 // Pheera (transport trips). Rules for this module:
@@ -29,7 +36,7 @@ const live = { isDeleted: false };
 
 const snapshotDto = (b) => ({ materialCategory: b.materialCategory, materialName: b.materialName, destination: b.destination, quantity: b.quantity, unit: b.unit, remarks: b.remarks ?? "" });
 
-export const toTripDto = (row) => ({
+export const toTripDto = (row, bill = null) => ({
   id: String(row._id),
   truckId: String(row.truckId),
   truckNumber: row.truckNumber,
@@ -48,6 +55,12 @@ export const toTripDto = (row) => ({
   voidReason: row.isDeleted ? row.deletedReason : null,
   voidedAt: row.isDeleted ? row.deletedAt : null,
   voidedBy: row.isDeleted ? row.deletedBy : null,
+  customer: row.customerId ? { id: String(row.customerId), name: row.customerName ?? "" } : null,
+  billingStatus: row.billingStatus ?? null, // null = a historical Pheera (not billable, not locked)
+  billId: row.billId ? String(row.billId) : null,
+  bill: bill ? { id: String(bill._id), billNumber: bill.billNumber ?? null, status: bill.status } : null,
+  reservedAt: row.reservedAt ?? null,
+  billedAt: row.billedAt ?? null,
   submissionId: row.submissionId ?? null,
   clientRowId: row.clientRowId ?? null,
   createdAt: row.createdAt,
@@ -56,10 +69,23 @@ export const toTripDto = (row) => ({
   updatedBy: row.updatedByName ?? null,
 });
 
-const toDetailDto = (row) => ({
-  ...toTripDto(row),
+const toDetailDto = (row, bill = null) => ({
+  ...toTripDto(row, bill),
+  billingHistory: (row.billingHistory ?? []).map((h) => ({ action: h.action, at: h.at, by: h.by, billId: h.billId ? String(h.billId) : null, billNumber: h.billNumber ?? null, previousBillId: h.previousBillId ? String(h.previousBillId) : null, previousBillNumber: h.previousBillNumber ?? null, reason: h.reason ?? null })),
   audit: (row.history ?? []).map(({ action, revision, at, by, reason, before }) => ({ action, revision, at, by, reason, before: snapshotDto(before) })),
 });
+
+/** The bill (number and status) each Pheera is currently held by, looked up once for a page of records. */
+const billsOf = async (rows) => {
+  const billIds = [...new Set(rows.filter((r) => r.billId).map((r) => String(r.billId)))];
+  if (!billIds.length) return new Map();
+  const found = await Bill.find({ _id: { $in: billIds } }).lean();
+  return new Map(found.map((b) => [String(b._id), b]));
+};
+export const tripDtos = async (rows) => {
+  const bills = await billsOf(rows);
+  return rows.map((r) => toTripDto(r, r.billId ? bills.get(String(r.billId)) : null));
+};
 
 export const summaryDto = (rows) => summarizeTrips(rows);
 
@@ -68,9 +94,13 @@ export const summaryDto = (rows) => summarizeTrips(rows);
 /** "mh04" matches "MH-04-AB-1234": letters and digits in order with anything between them. Only A-Z0-9 reach the pattern, so it is safe. */
 const registrationPattern = (text) => new RegExp([...truckNumberKey(text)].join("[^A-Z0-9]*"), "i");
 
-export const buildTripFilter = ({ truckId, registration, material, materialName, destination, date, from, to, includeVoided = false } = {}) => ({
+export const buildTripFilter = ({ truckId, registration, material, materialName, destination, date, from, to, includeVoided = false, customerId, billingStatus, billId, billable } = {}) => ({
   ...(includeVoided ? {} : live),
   ...(truckId ? { truckId } : {}),
+  ...(customerId ? { customerId } : {}),
+  ...(billId ? { billId } : {}),
+  // billable=true: only normal customers' Pheeras still waiting for an invoice. NOT_BILLABLE (internal) can never match.
+  ...(billable ? { billingStatus: BILLING_STATUS.UNBILLED } : billingStatus ? { billingStatus } : {}),
   ...(registration ? { truckNumber: truckNumberKey(registration) ? registrationPattern(registration) : { $in: [] } } : {}), // text with no letters or digits matches nothing
   ...(material ? { materialCategory: material } : {}),
   ...(materialName ? { materialKey: textKey(materialName) } : {}),
@@ -89,13 +119,13 @@ export const listTrips = async (query) => {
     TruckTrip.find(filter).sort({ businessDate: -1, truckNumber: 1, pheeraNo: 1 }).skip((page - 1) * limit).limit(limit).lean(),
     TruckTrip.find({ ...filter, ...live }).lean(),
   ]);
-  return { items: rows.map(toTripDto), page, limit, total, summary: summaryDto(all) };
+  return { items: await tripDtos(rows), page, limit, total, summary: summaryDto(all) };
 };
 
 /** The saved Pheera of one day (optionally one truck), in truck then Pheera order, with the day's totals. */
 export const getDay = async ({ date, truckId, includeVoided = false }) => {
   const rows = (await TruckTrip.find(buildTripFilter({ date, truckId, includeVoided })).lean()).sort((a, b) => a.truckNumber.localeCompare(b.truckNumber) || a.pheeraNo - b.pheeraNo);
-  return { date, items: rows.map(toTripDto), summary: summaryDto(rows.filter((r) => !r.isDeleted)) };
+  return { date, items: await tripDtos(rows), summary: summaryDto(rows.filter((r) => !r.isDeleted)) };
 };
 
 const loadTrip = async (id) => {
@@ -105,7 +135,11 @@ const loadTrip = async (id) => {
 };
 
 /** One record with its correction trail. */
-export const getTrip = async (id) => toDetailDto(await loadTrip(id));
+export const getTrip = async (id) => {
+  const row = await loadTrip(id);
+  const [bill] = row.billId ? await Bill.find({ _id: String(row.billId) }).lean() : [];
+  return toDetailDto(row, bill ?? null);
+};
 
 /** Values for the filter drop-downs: the standard materials plus every material and destination actually used. */
 export const getOptions = async () => {
@@ -137,6 +171,23 @@ export const createTrips = async ({ truckId, businessDate, submissionId = null, 
   const errors = rowErrorsOf(resolved);
   if (errors.length) throw ApiError.badRequest("Some rows cannot be saved. Nothing was saved.", errors);
 
+  // Every NEW Pheera needs a real, active customer. The built-in Internal customer makes it NOT_BILLABLE; everyone else UNBILLED.
+  const customerIds = [...new Set(rows.map((r) => String(r.customerId)))];
+  const found = await Customer.find({ _id: { $in: customerIds } }).lean();
+  const customers = new Map(found.map((c) => [String(c._id), c]));
+  const customerErrors = rows.flatMap((r, i) => {
+    const c = customers.get(String(r.customerId));
+    if (!c) return [{ field: `trips.${i}.customerId`, message: "Customer not found" }];
+    if (c.isDeleted) return [{ field: `trips.${i}.customerId`, message: `Customer "${c.name}" is archived` }];
+    return [];
+  });
+  if (customerErrors.length) {
+    // An unknown customer is a bad request (400). A customer that exists but is archived is a conflict (409), the same answer
+    // assertCustomersActive gives when the customer is archived during the save.
+    const unknown = customerErrors.some((e) => e.message === "Customer not found");
+    throw unknown ? ApiError.badRequest("Some rows cannot be saved. Nothing was saved.", customerErrors) : ApiError.conflict("Some rows cannot be saved. Nothing was saved.", customerErrors);
+  }
+
   const actorId = actor.id ?? null;
   const build = (max) =>
     rows.map((row, i) => ({
@@ -145,6 +196,13 @@ export const createTrips = async ({ truckId, businessDate, submissionId = null, 
       businessDate,
       pheeraNo: max + 1 + i,
       ...resolved[i].value,
+      customerId: String(row.customerId),
+      customerName: customers.get(String(row.customerId)).name,
+      billingStatus: customers.get(String(row.customerId)).kind === CUSTOMER_KIND.INTERNAL ? BILLING_STATUS.NOT_BILLABLE : BILLING_STATUS.UNBILLED,
+      billId: null,
+      reservedAt: null,
+      billedAt: null,
+      billingHistory: [],
       destination: normalizeText(row.destination),
       destinationKey: textKey(row.destination),
       remarks: normalizeText(row.remarks),
@@ -174,13 +232,14 @@ export const createTrips = async ({ truckId, businessDate, submissionId = null, 
             return { records: previous.sort((a, b) => a.pheeraNo - b.pheeraNo), duplicate: true };
           }
         }
+        await assertCustomersActive(rows.map((r) => r.customerId), session); // a customer archived a moment ago gets no new Pheera
         // Voided Pheera count too, so a number is never reused.
         const existing = await TruckTrip.find({ truckId, businessDate }).session(session).lean();
         const max = existing.reduce((m, t) => Math.max(m, t.pheeraNo), 0);
         const created = await TruckTrip.insertMany(build(max), { session });
         return { records: created.map((d) => d.toObject()), duplicate: false };
       });
-      return { records: result.records.map(toTripDto), duplicate: result.duplicate };
+      return { records: result.records.map((r) => toTripDto(r)), duplicate: result.duplicate };
     } catch (err) {
       if (!isDuplicateKey(err)) throw err;
       // Another save took one of these numbers (or this submission) at the same moment: read again and number afresh.
@@ -199,6 +258,7 @@ export const createTrips = async ({ truckId, businessDate, submissionId = null, 
 export const correctTrip = async (id, input, actor, now = new Date()) => {
   const trip = await loadTrip(id);
   if (trip.isDeleted) throw ApiError.conflict("A voided Pheera cannot be corrected");
+  if (LOCKED_BILLING_STATUSES.includes(trip.billingStatus)) throw await lockedError(trip, "corrected");
 
   let material = { materialCategory: trip.materialCategory, materialName: trip.materialName, materialKey: trip.materialKey, unit: trip.unit };
   let materialChanged = false;
@@ -226,7 +286,7 @@ export const correctTrip = async (id, input, actor, now = new Date()) => {
 
   const actorId = actor.id ?? null;
   const result = await TruckTrip.updateOne(
-    { _id: trip._id, revision: trip.revision, ...live },
+    { _id: trip._id, revision: trip.revision, ...live, billingStatus: { $nin: LOCKED_BILLING_STATUSES } }, // also checked in the write: a Pheera reserved a moment ago does not match
     {
       $set: { ...next, updatedBy: actorId, updatedByName: actor.name ?? null },
       $inc: { revision: 1 },
@@ -241,13 +301,69 @@ export const correctTrip = async (id, input, actor, now = new Date()) => {
 export const voidTrip = async (id, { reason }, actor, now = new Date()) => {
   const trip = await loadTrip(id);
   if (trip.isDeleted) throw ApiError.conflict("This Pheera is already voided");
+  if (LOCKED_BILLING_STATUSES.includes(trip.billingStatus)) throw await lockedError(trip, "voided");
   const actorId = actor.id ?? null;
   const result = await TruckTrip.updateOne(
-    { _id: trip._id, revision: trip.revision, ...live },
+    { _id: trip._id, revision: trip.revision, ...live, billingStatus: { $nin: LOCKED_BILLING_STATUSES } },
     {
       $set: { isDeleted: true, deletedAt: now, deletedBy: actor.name, deletedReason: reason, updatedBy: actorId, updatedByName: actor.name ?? null },
       $inc: { revision: 1 },
       $push: { history: { action: "VOID", revision: trip.revision, at: now, by: actor.name, byId: actorId, reason, before: snapshotDto(trip) } },
+    }
+  );
+  if (result.matchedCount !== 1) throw ApiError.conflict("This Pheera was changed by someone else. Reload and try again.");
+  return getTrip(id);
+};
+
+// ---------- Billing workflow: assign a customer, release ----------
+
+const historyEntry = (action, actor, extra = {}) => ({ action, at: new Date(), by: actor.name ?? "Unknown", byId: actor.id ?? null, billId: null, billNumber: null, reason: null, ...extra });
+
+/**
+ * Attach a customer to a Pheera: a historical Pheera (no customer yet), or fix a wrong customer while it is still UNBILLED or
+ * NOT_BILLABLE. Never automatic. A reserved or billed Pheera is locked. The status follows the customer (Internal -> NOT_BILLABLE).
+ */
+export const assignCustomer = async (id, { customerId, reason }, actor) => {
+  const trip = await loadTrip(id);
+  if (trip.isDeleted) throw ApiError.conflict("A voided Pheera cannot be changed");
+  if (LOCKED_BILLING_STATUSES.includes(trip.billingStatus)) throw await lockedError(trip, "reassigned to another customer");
+  const [customer] = await Customer.find({ _id: customerId }).lean();
+  if (!customer) throw fieldError(400, "Customer not found", "customerId");
+  if (customer.isDeleted) throw fieldError(409, `Customer "${customer.name}" is archived`, "customerId");
+  if (trip.customerId && String(trip.customerId) === String(customerId)) throw ApiError.conflict("This Pheera already has that customer");
+  const status = customer.kind === CUSTOMER_KIND.INTERNAL ? BILLING_STATUS.NOT_BILLABLE : BILLING_STATUS.UNBILLED;
+  const known = [BILLING_STATUS.UNBILLED, BILLING_STATUS.NOT_BILLABLE];
+  const result = await runInTransaction(async (session) => {
+    await assertCustomersActive([customer._id], session);
+    return TruckTrip.updateOne(
+      { _id: trip._id, revision: trip.revision, ...live, billingStatus: trip.billingStatus ? trip.billingStatus : { $nin: [...known, ...LOCKED_BILLING_STATUSES] } },
+      {
+        $set: { customerId: String(customer._id), customerName: customer.name, billingStatus: status, updatedBy: actor.id ?? null, updatedByName: actor.name ?? null },
+        $inc: { revision: 1 },
+        $push: { billingHistory: historyEntry(BILLING_ACTION.CUSTOMER_ASSIGNED, actor, { customerId: String(customer._id), reason }) },
+      },
+      session ? { session } : undefined
+    );
+  });
+  if (result.matchedCount !== 1) throw ApiError.conflict("This Pheera was changed by someone else. Reload and try again.");
+  return getTrip(id);
+};
+
+/**
+ * Explicit release (owner, reason required): a BILLED Pheera whose invoice is CANCELLED goes back to UNBILLED so it can be billed
+ * again. The cancelled invoice stays in the Pheera's billing history. A Pheera on a live invoice, or in a draft, cannot be released here.
+ */
+export const releaseTrip = async (id, { reason }, actor) => {
+  const trip = await loadTrip(id);
+  if (trip.billingStatus === BILLING_STATUS.RESERVED) throw ApiError.conflict("This Pheera is in a draft bill. Remove it from the draft instead");
+  if (trip.billingStatus !== BILLING_STATUS.BILLED) throw ApiError.conflict("Only a billed Pheera whose invoice was cancelled can be released");
+  const [bill] = await Bill.find({ _id: String(trip.billId) }).lean();
+  if (!bill || bill.status !== BILL_STATUS.CANCELLED) throw ApiError.conflict(`This Pheera is on invoice ${bill?.billNumber ?? ""}, which is not cancelled. Cancel the invoice first`.replace("  ", " "));
+  const result = await TruckTrip.updateOne(
+    { _id: trip._id, billId: String(trip.billId), billingStatus: BILLING_STATUS.BILLED, ...live },
+    {
+      $set: { billingStatus: BILLING_STATUS.UNBILLED, billId: null, reservedAt: null, billedAt: null, updatedBy: actor.id ?? null, updatedByName: actor.name ?? null },
+      $push: { billingHistory: historyEntry(BILLING_ACTION.RELEASED, actor, { billId: String(bill._id), billNumber: bill.billNumber ?? null, reason }) },
     }
   );
   if (result.matchedCount !== 1) throw ApiError.conflict("This Pheera was changed by someone else. Reload and try again.");

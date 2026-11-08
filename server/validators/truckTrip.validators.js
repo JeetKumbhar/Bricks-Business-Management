@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BILLING_STATUS_VALUES } from "../constants/billing.js";
 import { MATERIAL_CATEGORY_VALUES, MAX_DESTINATION, MAX_REMARKS, MAX_TRIPS_PER_BATCH, MIN_DESTINATION, UNIT_VALUES } from "../constants/truck.js";
 import { isValidBusinessDate } from "../utils/dates.js";
 import { resolveTripMaterial } from "../utils/truckRules.js";
@@ -10,6 +11,8 @@ import { resolveTripMaterial } from "../utils/truckRules.js";
 const businessDate = z.string().refine(isValidBusinessDate, "Use a real date in YYYY-MM-DD form");
 const objectId = (label) => z.string().regex(/^[0-9a-f]{24}$/, `Not a valid ${label} id`);
 const truckId = objectId("truck");
+const customerId = objectId("customer");
+const billId = objectId("bill");
 const submissionId = z.string().regex(/^[A-Za-z0-9_-]{8,64}$/, "submissionId must be 8 to 64 letters, digits, - or _");
 const clientRowId = z.string().regex(/^[A-Za-z0-9_-]{1,40}$/, "clientRowId must be 1 to 40 letters, digits, - or _");
 const reason = z.string().trim().min(3, "Please give a reason").max(200, "Reason is too long");
@@ -21,7 +24,7 @@ const quantity = z.number({ error: "Quantity must be a number" });
 const unit = z.enum(UNIT_VALUES);
 const remarks = z.string().trim().max(MAX_REMARKS, "Remarks are too long");
 
-const tripFields = { material, customMaterialName: customMaterialName.optional(), destination, quantity, unit: unit.optional(), remarks: remarks.optional() };
+const tripFields = { customerId, material, customMaterialName: customMaterialName.optional(), destination, quantity, unit: unit.optional(), remarks: remarks.optional() };
 
 /** The material / quantity / unit rules, reported against the field the person has to fix. */
 const checkMaterial = (row, ctx) => {
@@ -66,6 +69,8 @@ export const correctionSchema = z
   });
 
 export const voidSchema = z.strictObject({ reason });
+export const assignCustomerSchema = z.strictObject({ customerId, reason });
+export const releaseSchema = z.strictObject({ reason });
 
 const flag = z.enum(["true", "false"]).transform((v) => v === "true");
 const rangeOrder = (q, ctx) => {
@@ -85,6 +90,6 @@ export const filterFields = {
   from: businessDate.optional(),
   to: businessDate.optional(),
 };
-export const listQuerySchema = z.strictObject({ ...filterFields, includeVoided: flag.default(false), page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(500).default(100) }).superRefine(rangeOrder);
+export const listQuerySchema = z.strictObject({ ...filterFields, customerId: customerId.optional(), billingStatus: z.enum(BILLING_STATUS_VALUES).optional(), billId: billId.optional(), billable: flag.optional(), includeVoided: flag.default(false), page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(500).default(100) }).superRefine(rangeOrder);
 export const dayQuerySchema = z.strictObject({ date: businessDate, truckId: truckId.optional(), includeVoided: flag.default(false) });
 export const rangeCheck = rangeOrder;

@@ -11,7 +11,7 @@ vi.hoisted(() => {
 });
 
 // No database in tests: real Mongoose schemas validate; an in-memory store replaces only the storage calls.
-const { db, makeAttendanceModel, makeCounterModel, makeLabourModel, makeMaapEntryModel, makePaymentModel, makeProductionEntryModel, makeRateModel, makeSeasonModel, makeTruckHistoryModel, makeTruckModel, makeTruckTripModel } = await import("./helpers/memoryDb.js");
+const { db, makeAttendanceModel, makeCounterModel, makeLabourModel, makeMaapEntryModel, makePaymentModel, makeProductionEntryModel, makeRateModel, makeSeasonModel, makeTruckHistoryModel, makeTruckModel, makeTruckTripModel, makeCustomerModel, makeBillModel } = await import("./helpers/memoryDb.js");
 const users = vi.hoisted(() => ({ list: [] }));
 
 vi.mock("../config/db.js", () => ({ getDbStatus: async () => ({ status: "connected", name: "test" }) }));
@@ -28,6 +28,8 @@ vi.mock("../models/ProductionEntry.js", () => ({ default: makeProductionEntryMod
 vi.mock("../models/Payment.js", async (importOriginal) => ({ default: makePaymentModel((await importOriginal()).default) }));
 vi.mock("../models/Truck.js", async (importOriginal) => ({ default: makeTruckModel((await importOriginal()).default) }));
 vi.mock("../models/TruckStatusHistory.js", async (importOriginal) => ({ default: makeTruckHistoryModel((await importOriginal()).default) }));
+vi.mock("../models/Customer.js", async (importOriginal) => ({ default: makeCustomerModel((await importOriginal()).default) }));
+vi.mock("../models/Bill.js", async (importOriginal) => ({ default: makeBillModel((await importOriginal()).default) }));
 vi.mock("../models/TruckTrip.js", async (importOriginal) => ({ default: makeTruckTripModel((await importOriginal()).default) }));
 vi.mock("../utils/transaction.js", () => ({ runInTransaction: (work) => db.transaction(() => work(null)) }));
 
@@ -77,9 +79,11 @@ const addTruck = async (o = {}) => {
 const setStatus = (t, body) => asOwner("post", `/api/trucks/${t.id}/status`, body);
 const historyOf = async (t) => (await asOwner("get", `/api/trucks/${t.id}/history`)).body.data;
 
-const bricks = (quantity, destination = "Palghar", extra = {}) => ({ material: "BRICKS", destination, quantity, ...extra });
-const soil = (quantity, destination = "Palghar", extra = {}) => ({ material: "SOIL", destination, quantity, ...extra });
-const other = (name, quantity, destination = "Palghar", extra = {}) => ({ material: "OTHER", customMaterialName: name, destination, quantity, ...extra });
+// Every NEW Pheera needs a customer (Pheera <-> Bills integration); the tests share one saved customer.
+let CUSTOMER_ID = "";
+const bricks = (quantity, destination = "Palghar", extra = {}) => ({ customerId: CUSTOMER_ID, material: "BRICKS", destination, quantity, ...extra });
+const soil = (quantity, destination = "Palghar", extra = {}) => ({ customerId: CUSTOMER_ID, material: "SOIL", destination, quantity, ...extra });
+const other = (name, quantity, destination = "Palghar", extra = {}) => ({ customerId: CUSTOMER_ID, material: "OTHER", customMaterialName: name, destination, quantity, ...extra });
 const batch = (t, date, trips, extra = {}) => asOwner("post", "/api/truck-trips/batch", { truckId: t.id, businessDate: date, trips, ...extra });
 const saved = async (t, date, trips, extra) => {
   const res = await batch(t, date, trips, extra);
@@ -102,6 +106,8 @@ beforeEach(() => {
   owner = addUser("OWNER");
   manager = addUser("MANAGER", "Helper");
   app = createApp();
+  CUSTOMER_ID = new mongoose.Types.ObjectId().toString();
+  db.customers.set(CUSTOMER_ID, { _id: CUSTOMER_ID, name: "Test Customer", customerKey: "test customer", kind: "NORMAL", isDeleted: false, revision: 1, history: [] });
 });
 afterEach(() => vi.useRealTimers());
 

@@ -13,6 +13,8 @@ const matchValue = (actual, cond) => {
   if (cond instanceof RegExp) return typeof actual === "string" && cond.test(actual);
   if (cond && typeof cond === "object") {
     if ("$in" in cond) return cond.$in.includes(actual);
+    if ("$nin" in cond) return !cond.$nin.some((v) => (v === null || v === undefined ? actual === null || actual === undefined : String(v) === String(actual)));
+    if ("$exists" in cond) return (actual !== undefined) === cond.$exists;
     if ("$ne" in cond) return String(actual) !== String(cond.$ne);
     if ("$gte" in cond || "$lte" in cond) return typeof actual === "string" && (!("$gte" in cond) || actual >= cond.$gte) && (!("$lte" in cond) || actual <= cond.$lte);
     throw new Error(`memoryDb: unsupported operator ${JSON.stringify(cond)}`);
@@ -62,6 +64,13 @@ class Query {
 
 const duplicate = (keyPattern) => Object.assign(new Error("E11000 duplicate key error"), { code: 11000, keyPattern });
 const raw = (doc) => doc.toObject({ transform: false });
+// A real driver returns ObjectIds; this fake keeps every id as a string so comparisons stay simple (also inside arrays and sub-documents).
+const stringifyIds = (value) => {
+  if (value instanceof mongoose.Types.ObjectId) return String(value);
+  if (Array.isArray(value)) return value.map(stringifyIds);
+  if (value && Object.getPrototypeOf(value) === Object.prototype) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, stringifyIds(v)]));
+  return value;
+};
 
 export const db = {
   labours: new Map(),
@@ -75,6 +84,7 @@ export const db = {
   truckHistory: new Map(), // key = _id
   trips: new Map(), // key = _id
   bills: new Map(), // key = _id
+  customers: new Map(), // key = _id
   invoiceSettings: new Map(), // key = _id
   counters: {},
   failNextRateCreate: false,
@@ -90,6 +100,9 @@ export const db = {
     this.truckHistory.clear();
     this.trips.clear();
     this.bills.clear();
+    this.customers.clear();
+    this.beforeTripUpdate = null;
+    this.beforeCustomerUpdate = null;
     this.invoiceSettings.clear();
     this.beforeBillUpdate = null;
     this.beforeTripInsert = null;
@@ -381,7 +394,7 @@ export const makePaymentModel = (Real) => {
  * were (all-or-nothing), the way a real aborted transaction does.
  */
 db.transaction = async (work) => {
-  const stores = [db.trucks, db.truckHistory, db.trips, db.bills, db.invoiceSettings];
+  const stores = [db.trucks, db.truckHistory, db.trips, db.bills, db.invoiceSettings, db.customers];
   const take = () => [...stores.map((store) => [...store.entries()].map(([k, v]) => [k, structuredClone(v)])), structuredClone(db.counters)];
   let snapshot = take();
   db.resnapshot = () => { snapshot = take(); }; // a rival writer's committed change is not undone by OUR rollback
@@ -418,9 +431,8 @@ export const makeDocModel = (Real, store, { unique = () => false, hook, beforeUp
         const doc = new Real(data);
         const err = doc.validateSync();
         if (err) throw err;
-        const row = raw(doc);
+        const row = stringifyIds(raw(doc));
         row._id = String(row._id);
-        for (const [k, v] of Object.entries(row)) if (k !== "_id" && v instanceof mongoose.Types.ObjectId) row[k] = String(v);
         if (unique(row, rows())) throw duplicate({ unique: 1 });
         row.createdAt = row.updatedAt = new Date();
         store.set(row._id, row);
@@ -428,13 +440,23 @@ export const makeDocModel = (Real, store, { unique = () => false, hook, beforeUp
       }
       return created.map((r) => ({ ...clone(r), toObject: () => clone(r) }));
     },
+    async updateMany(filter, update) {
+      beforeUpdate?.(filter);
+      const hits = rows().filter((r) => matches(r, filter));
+      for (const found of hits) {
+        const next = { ...found, ...stringifyIds(clone(update.$set ?? {})) };
+        for (const [k, v] of Object.entries(update.$push ?? {})) next[k] = [...(next[k] ?? []), stringifyIds(clone(v))];
+        Object.assign(found, next, { updatedAt: new Date() });
+      }
+      return { matchedCount: hits.length, modifiedCount: hits.length };
+    },
     async updateOne(filter, update) {
       beforeUpdate?.(filter);
       const found = rows().find((r) => matches(r, filter));
       if (!found) return { matchedCount: 0, modifiedCount: 0 };
-      const next = { ...found, ...clone(update.$set ?? {}) };
+      const next = { ...found, ...stringifyIds(clone(update.$set ?? {})) };
       for (const [k, by] of Object.entries(update.$inc ?? {})) next[k] = (next[k] ?? 0) + by;
-      for (const [k, v] of Object.entries(update.$push ?? {})) next[k] = [...(next[k] ?? []), clone(v)];
+      for (const [k, v] of Object.entries(update.$push ?? {})) next[k] = [...(next[k] ?? []), stringifyIds(clone(v))];
       if (unique(next, rows().filter((r) => r._id !== found._id))) throw duplicate({ unique: 1 });
       Object.assign(found, next, { updatedAt: new Date() });
       return { matchedCount: 1, modifiedCount: 1 };
@@ -463,11 +485,12 @@ export const makeTruckTripModel = (Real) =>
       }
       db.beforeTripInsert?.(data, index);
     },
+    beforeUpdate: (filter) => db.beforeTripUpdate?.(filter),
   });
 
 export const makeBillModel = (Real) =>
   makeDocModel(Real, db.bills, {
-    unique: (row, all) => typeof row.billNumber === "string" && all.some((r) => r._id !== row._id && r.billNumber === row.billNumber),
+    unique: (row, all) => all.some((r) => r._id !== row._id && ((typeof row.billNumber === "string" && r.billNumber === row.billNumber) || (typeof row.requestId === "string" && r.requestId === row.requestId))),
     beforeUpdate: (filter) => db.beforeBillUpdate?.(filter),
   });
 
@@ -486,3 +509,5 @@ export const makeInvoiceSettingsModel = (Real) => {
     },
   };
 };
+
+export const makeCustomerModel = (Real) => makeDocModel(Real, db.customers, { unique: (row, all) => all.some((r) => r._id !== row._id && r.customerKey === row.customerKey), beforeUpdate: (filter) => db.beforeCustomerUpdate?.(filter) });

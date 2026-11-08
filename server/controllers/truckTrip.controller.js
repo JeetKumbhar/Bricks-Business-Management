@@ -32,3 +32,5 @@ export const batch = async (req, res) => {
 
 export const correct = async (req, res) => sendSuccess(res, { message: "Pheera corrected successfully", data: await trips.correctTrip(req.params.id, req.body, req.user) });
 export const voidOne = async (req, res) => sendSuccess(res, { message: "Pheera voided successfully", data: await trips.voidTrip(req.params.id, req.body, req.user) });
+export const assign = async (req, res) => sendSuccess(res, { message: "Customer assigned to the Pheera", data: await trips.assignCustomer(req.params.id, req.body, req.user) });
+export const release = async (req, res) => sendSuccess(res, { message: "Pheera released for billing", data: await trips.releaseTrip(req.params.id, req.body, req.user) });

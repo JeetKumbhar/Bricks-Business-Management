@@ -6,10 +6,18 @@
 //   Totals are exact sums of the stored per-line integers, so the printed lines always add up to the printed totals.
 // There is no automatic round-off line: the grand total is taxable + taxes to the paisa.
 import { TAX_MODE, TAX_TYPE } from "../constants/bill.js";
+import { PRICING_UNIT } from "../constants/billing.js";
+import { MATERIAL_CATEGORY } from "../constants/truck.js";
 
 const roundDiv = (numerator, denominator) => Number((numerator * 2n + denominator) / (denominator * 2n)); // half up, non-negative values
 
-export const lineTaxable = (quantityMilli, ratePaise) => roundDiv(BigInt(quantityMilli) * BigInt(ratePaise), 1000n);
+// pricingUnit PER_UNIT (default; every manual line): amount = quantity x rate. PER_THOUSAND (bricks lines from a Pheera): the rate is
+// per 1,000 units, so amount = quantity / 1000 x rate. Rounded once, half up, to the paisa (25,000 bricks at 7,000 per 1,000 = 1,75,000.00).
+export const lineTaxable = (quantityMilli, ratePaise, pricingUnit = PRICING_UNIT.PER_UNIT) =>
+  roundDiv(BigInt(quantityMilli) * BigInt(ratePaise), pricingUnit === PRICING_UNIT.PER_THOUSAND ? 1_000_000n : 1000n);
+
+/** The ONE place that decides how a Pheera's material is priced: bricks per 1,000, everything else per tonne. */
+export const pricingUnitFor = (materialCategory) => (materialCategory === MATERIAL_CATEGORY.BRICKS ? PRICING_UNIT.PER_THOUSAND : PRICING_UNIT.PER_UNIT);
 const taxOf = (taxable, rateBp, divisor) => roundDiv(BigInt(taxable) * BigInt(rateBp), BigInt(divisor));
 
 /** Which tax applies: same state code = CGST + SGST, different = IGST, either missing = unknown (null). Never guessed. */
@@ -26,7 +34,7 @@ export const calculateBill = ({ items, taxMode, taxType }) => {
   const gst = taxMode === TAX_MODE.GST;
   const taxPending = gst && !taxType;
   const lines = items.map((item) => {
-    const taxable = lineTaxable(item.quantityMilli ?? 0, item.ratePaise ?? 0);
+    const taxable = lineTaxable(item.quantityMilli ?? 0, item.ratePaise ?? 0, item.pricingUnit);
     const rateBp = gst ? (item.taxRateBp ?? 0) : 0;
     const apply = gst && !taxPending;
     const cgst = apply && taxType === TAX_TYPE.INTRA ? taxOf(taxable, rateBp, 20000) : 0;

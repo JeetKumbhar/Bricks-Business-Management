@@ -9,6 +9,7 @@ import {
   UNIT_VALUES,
   UNITS,
 } from "../constants/truck.js";
+import { BILLING_ACTION_VALUES, BILLING_STATUS_VALUES } from "../constants/billing.js";
 import { businessDateField, createSchema, softDeleteFields } from "../utils/schema.js";
 import { quantityError } from "../utils/truckRules.js";
 
@@ -45,6 +46,24 @@ const auditSchema = new mongoose.Schema(
     byId: { type: String, default: null },
     reason: { type: String, trim: true, required: true, maxlength: 200 },
     before: { type: snapshotSchema, required: true },
+  },
+  { _id: false }
+);
+
+// Billing trail (Pheera <-> Bills integration): every reservation, release, billing, cancellation and re-billing, with the invoice it
+// concerned. Appended only; never edited.
+const billingHistorySchema = new mongoose.Schema(
+  {
+    action: { type: String, enum: BILLING_ACTION_VALUES, required: true },
+    at: { type: Date, required: true },
+    by: { type: String, required: true },
+    byId: { type: String, default: null },
+    billId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    billNumber: { type: String, default: null },
+    previousBillId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    previousBillNumber: { type: String, default: null },
+    customerId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    reason: { type: String, default: null },
   },
   { _id: false }
 );
@@ -95,6 +114,14 @@ const tripSchema = createSchema({
   remarks: { type: String, trim: true, maxlength: MAX_REMARKS, default: "" },
   submissionId: { type: String, default: null, immutable: true }, // one id per "Save all"; saving it twice never duplicates
   clientRowId: { type: String, default: null, immutable: true },
+  // Billing. All optional so historical Pheeras stay valid (customerId null, billingStatus null = not billable, not locked).
+  customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", default: null },
+  customerName: { type: String, default: null }, // snapshot, like truckNumber
+  billingStatus: { type: String, enum: [...BILLING_STATUS_VALUES, null], default: null },
+  billId: { type: mongoose.Schema.Types.ObjectId, ref: "Bill", default: null }, // the ONE authoritative link: which bill holds this Pheera now
+  reservedAt: { type: Date, default: null },
+  billedAt: { type: Date, default: null },
+  billingHistory: { type: [billingHistorySchema], default: [] },
   revision: { type: Number, default: 1, min: 1 },
   history: { type: [auditSchema], default: [] },
   ...softDeleteFields(),
@@ -111,5 +138,8 @@ tripSchema.index({ submissionId: 1, clientRowId: 1 }, { unique: true, partialFil
 tripSchema.index({ businessDate: 1, truckId: 1 });
 tripSchema.index({ materialKey: 1, businessDate: 1 });
 tripSchema.index({ destinationKey: 1, businessDate: 1 });
+tripSchema.index({ customerId: 1, billingStatus: 1, businessDate: 1 });
+tripSchema.index({ billId: 1 });
+tripSchema.index({ billingStatus: 1, businessDate: 1 });
 
 export default mongoose.models.TruckTrip || mongoose.model("TruckTrip", tripSchema);

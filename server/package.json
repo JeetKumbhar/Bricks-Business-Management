@@ -21,7 +21,8 @@
     "test:productionEntry": "vitest run tests/productionEntry.test.js",
     "test:payment": "vitest run tests/payment.test.js",
     "test:salary": "vitest run tests/salary.test.js",
-    "create-owner": "node scripts/createOwner.js"
+    "create-owner": "node scripts/createOwner.js",
+    "sync-indexes": "node scripts/syncIndexes.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
