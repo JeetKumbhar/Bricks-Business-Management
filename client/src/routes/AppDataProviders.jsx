@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { BillProvider } from "../context/BillContext";
+import { CustomerProvider } from "../context/CustomerContext";
 import { LabourProvider } from "../context/LabourContext";
 import { TruckProvider } from "../context/TruckContext";
 import { TruckTripProvider } from "../context/TruckTripContext";
@@ -12,13 +13,15 @@ import { TruckTripProvider } from "../context/TruckTripContext";
 export default function AppDataProviders() {
   return (
     <LabourProvider>
-      <TruckProvider>
-        <TruckTripProvider>
-          <BillProvider>
-            <Outlet />
-          </BillProvider>
-        </TruckTripProvider>
-      </TruckProvider>
+      <CustomerProvider>
+        <TruckProvider>
+          <TruckTripProvider>
+            <BillProvider>
+              <Outlet />
+            </BillProvider>
+          </TruckTripProvider>
+        </TruckProvider>
+      </CustomerProvider>
     </LabourProvider>
   );
 }

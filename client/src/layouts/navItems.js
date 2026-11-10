@@ -1,4 +1,4 @@
-import { BarChart3, Banknote, Boxes, CalendarCheck, Factory, FileText, LayoutDashboard, Settings, Truck, Users, Wallet } from "lucide-react";
+import { BarChart3, Banknote, Boxes, CalendarCheck, Factory, FileText, LayoutDashboard, Settings, Truck, Users, UserRound, Wallet } from "lucide-react";
 
 // Single source of truth for navigation (used by Sidebar and MobileBottomNav).
 // `mobileLabel` is the shorter label shown in the bottom bar.
@@ -11,6 +11,7 @@ export const navItems = [
   { label: "Patlavale Production", mobileLabel: "Production", path: "/patlavale-production", icon: Factory },
   { label: "Salary", path: "/salary", icon: Banknote },
   { label: "Trucks", path: "/trucks", icon: Truck },
+  { label: "Customers", path: "/customers", icon: UserRound },
   { label: "Bills", path: "/bills", icon: FileText },
   { label: "Reports", path: "/reports", icon: BarChart3 },
   { label: "Settings", path: "/settings", icon: Settings },

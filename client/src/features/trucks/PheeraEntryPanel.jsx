@@ -14,6 +14,7 @@ import { STOP_REASON_LABELS, TRUCK_STATUS, TRUCK_STATUS_META } from "../../utils
 import { numberingGaps } from "./pheeraOps";
 import { knownMaterials, summarizePheeras } from "./pheeraSelectors";
 import PheeraRowEditor, { DESTINATION_LIST_ID, MATERIAL_LIST_ID } from "./PheeraRowEditor";
+import NoCustomersNotice from "./NoCustomersNotice";
 import { prepareEntry } from "./pheeraEntry";
 import { createSaveFlow } from "./pheeraSaveFlow";
 import PheeraTable from "./PheeraTable";
@@ -289,11 +290,7 @@ export default function PheeraEntryPanel() {
           </Button>
         </p>
       )}
-      {customers.status === "ready" && customerOptions.length === 0 && (
-        <p role="status" className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-amber-700">
-          There are no customers yet, so a Pheera cannot be saved. Every Pheera needs a customer.
-        </p>
-      )}
+      {customers.status === "ready" && customerList.length === 0 && <NoCustomersNotice internalAvailable={Boolean(internalCustomer)} />}
       </fieldset>
 
       <Card>

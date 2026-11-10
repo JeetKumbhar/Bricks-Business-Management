@@ -88,3 +88,24 @@ describe("customer choices (Internal / No Bill behaviour)", () => {
     expect(splitCustomers([{ ...all[3], isArchived: true }]).internal).toBeNull();
   });
 });
+
+describe("Step 3: the dropdown's choices feed the payload with customer IDs (never names)", () => {
+  const all = [
+    { id: "64a000000000000000000001", name: "Ram Constructions", isInternal: false, isArchived: false },
+    { id: "64a000000000000000000002", name: "Old Co", isInternal: false, isArchived: true },
+    { id: "64a0000000000000000000ff", name: "Internal / No Bill", isInternal: true, isArchived: false },
+  ];
+  it("14. choosing a dropdown option submits its id; Internal / No Bill submits the built-in customer's id", () => {
+    const options = customerOptionsFor(splitCustomers(all));
+    expect(options.map((o) => o.value)).toEqual(["64a000000000000000000001", "64a0000000000000000000ff"]); // the archived customer is not offered
+    const ram = options.find((o) => o.label === "Ram Constructions");
+    const internal = options.find((o) => o.label === INTERNAL_LABEL);
+    const { payload } = prepareEntry({ ...base, drafts: [row({ customerId: ram.value }), row({ key: "k2", customerId: internal.value, material: "Soil", quantity: "2" })] });
+    expect(payload.rows.map((r) => r.customerId)).toEqual(["64a000000000000000000001", "64a0000000000000000000ff"]);
+    expect(JSON.stringify(payload)).not.toMatch(/Ram Constructions|Internal \/ No Bill|customerName/);
+  });
+  it("12/13. archived customers are never in the choices and normal customers are", () => {
+    const { customers } = splitCustomers(all);
+    expect(customers.map((c) => c.name)).toEqual(["Ram Constructions"]);
+  });
+});

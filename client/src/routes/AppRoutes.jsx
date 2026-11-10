@@ -14,6 +14,7 @@ import Settings from "../pages/Settings";
 import Bills from "../pages/Bills";
 import BillDetail from "../pages/BillDetail";
 import BillEditor from "../pages/BillEditor";
+import Customers from "../pages/Customers";
 import Trucks from "../pages/Trucks";
 import TruckDetail from "../pages/TruckDetail";
 import PatlavaleProduction from "../pages/PatlavaleProduction";
@@ -71,6 +72,7 @@ export default function AppRoutes() {
             <Route path="salary" element={<Salary />} />
             <Route path="trucks" element={<Trucks />} />
             <Route path="trucks/:id" element={<TruckDetail />} />
+            <Route path="customers" element={<Customers />} />
             <Route path="bills" element={<Bills />} />
             <Route path="bills/new" element={<BillEditor />} />
             <Route path="bills/:id" element={<BillDetail />} />
