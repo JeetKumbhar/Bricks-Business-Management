@@ -4,27 +4,39 @@ import { Badge, Button, Input, Modal, Select, Textarea } from "../../components/
 import { cn } from "../../utils/cn";
 import { STOP_REASON_LABELS, TRUCK_STATUS, TRUCK_STATUS_META } from "../../utils/truckStatus";
 import { makeStatusChangeSchema } from "../../validators/truckValidator";
+import UnconfirmedNotice from "./UnconfirmedNotice";
 
 const FORM_ID = "truck-status-form";
 const statuses = [TRUCK_STATUS.WORKING, TRUCK_STATUS.STOPPED, TRUCK_STATUS.MAINTENANCE];
 
-function StatusForm({ truck, onSubmit }) {
+const SERVER_FIELDS = ["status", "reason", "note", "description"];
+
+function StatusForm({ truck, onSubmit, submitting }) {
   const first = statuses.find((s) => s !== truck.status);
   const {
     register,
     handleSubmit,
     control,
     watch,
+    setError,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(makeStatusChangeSchema(truck.status)),
-    defaultValues: { status: first, reason: "", note: "", description: "", cost: "" },
+    defaultValues: { status: first, reason: "", note: "", description: "", cost: "" }, // cost stays "" and is never sent
   });
   const status = watch("status");
-  const leavingMaintenance = truck.status === TRUCK_STATUS.MAINTENANCE && status === TRUCK_STATUS.WORKING;
 
   return (
-    <form id={FORM_ID} noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form
+      id={FORM_ID}
+      noValidate
+      onSubmit={handleSubmit(async (values) => {
+        const result = await onSubmit(values);
+        for (const [field, message] of Object.entries(result?.fieldErrors ?? {})) if (SERVER_FIELDS.includes(field)) setError(field, { type: "server", message });
+      })}
+      className="space-y-4"
+    >
+      <fieldset disabled={submitting} className="m-0 min-w-0 space-y-4 border-0 p-0">
       <div className="flex items-center gap-2 rounded-lg bg-background px-4 py-3 text-sm">
         <span className="text-fg-muted">Now:</span>
         <Badge variant={TRUCK_STATUS_META[truck.status].variant}>{TRUCK_STATUS_META[truck.status].label}</Badge>
@@ -83,22 +95,8 @@ function StatusForm({ truck, onSubmit }) {
       {status === TRUCK_STATUS.MAINTENANCE && (
         <>
           <Input label="Maintenance work" required placeholder="e.g. Engine service" error={errors.description?.message} {...register("description")} />
-          <Input label="Estimated cost (optional)" type="number" inputMode="decimal" min="0" step="any" placeholder="0" error={errors.cost?.message} {...register("cost")} />
+          <p className="type-small">Maintenance cost cannot be saved yet, so it is not asked for.</p>
         </>
-      )}
-
-      {leavingMaintenance && (
-        <Input
-          label="Final maintenance cost (optional)"
-          type="number"
-          inputMode="decimal"
-          min="0"
-          step="any"
-          placeholder="0"
-          hint="The open maintenance record is marked completed."
-          error={errors.cost?.message}
-          {...register("cost")}
-        />
       )}
 
       {status !== TRUCK_STATUS.MAINTENANCE && (
@@ -111,12 +109,13 @@ function StatusForm({ truck, onSubmit }) {
           {...register("note")}
         />
       )}
+      </fieldset>
     </form>
   );
 }
 
 /** Change a truck's status. Every change is saved in the history (nothing is overwritten). */
-export default function StatusChangeModal({ truck, onClose, onSubmit }) {
+export default function StatusChangeModal({ truck, submitting = false, unconfirmed = null, onRecheck, onClose, onSubmit }) {
   return (
     <Modal
       open={Boolean(truck)}
@@ -125,16 +124,17 @@ export default function StatusChangeModal({ truck, onClose, onSubmit }) {
       description={truck ? truck.truckNumber : undefined}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit" form={FORM_ID}>
-            Save Status
+          <Button type="submit" form={FORM_ID} loading={submitting} disabled={submitting || Boolean(unconfirmed)}>
+            {submitting ? "Saving..." : "Save Status"}
           </Button>
         </>
       }
     >
-      {truck && <StatusForm key={truck.id} truck={truck} onSubmit={(values) => onSubmit(truck.id, values)} />}
+      {truck && unconfirmed && <UnconfirmedNotice message={unconfirmed} onRecheck={onRecheck} busy={submitting} />}
+      {truck && <StatusForm key={truck.id} truck={truck} submitting={submitting || Boolean(unconfirmed)} onSubmit={(values) => onSubmit(truck.id, values)} />}
     </Modal>
   );
 }

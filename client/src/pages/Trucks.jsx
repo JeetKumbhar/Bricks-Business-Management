@@ -22,7 +22,7 @@ const TABS = [
  */
 export default function Trucks() {
   const mgmt = useTruckManagement();
-  const { loadError } = useTruckTrips();
+  const { loadError, reload: reloadPheeras } = useTruckTrips();
   const [params, setParams] = useSearchParams();
   const requested = params.get("tab");
   const tab = TABS.some((t) => t.id === requested) ? requested : "overview";
@@ -43,10 +43,21 @@ export default function Trucks() {
         </Button>
       </div>
 
+      {mgmt.status === "error" && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
+          <span>Could not load the trucks: {mgmt.loadError}</span>
+          <Button variant="outline" size="sm" onClick={mgmt.reload}>
+            Try again
+          </Button>
+        </div>
+      )}
       {loadError && (
-        <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
-          Could not load Pheera records: {loadError}
-        </p>
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
+          <span>Could not load Pheera records: {loadError}</span>
+          <Button variant="outline" size="sm" onClick={reloadPheeras}>
+            Try again
+          </Button>
+        </div>
       )}
 
       <div className="sticky top-16 z-20 -mx-4 bg-background px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
@@ -56,7 +67,7 @@ export default function Trucks() {
       <div role="tabpanel">
         {tab === "overview" && <TruckOverview onOpenTab={setTab} />}
         {tab === "trucks" && (
-          <TruckListPanel trucks={mgmt.trucks} summary={mgmt.summary} onUpdateStatus={mgmt.openStatus} onHistory={mgmt.openHistory} onEdit={mgmt.openEdit} />
+          <TruckListPanel loading={mgmt.loading} trucks={mgmt.trucks} summary={mgmt.summary} onUpdateStatus={mgmt.openStatus} onHistory={mgmt.openHistory} onEdit={mgmt.openEdit} />
         )}
         {/* Always mounted (only hidden), so a half-typed entry is not lost when you look at another tab. */}
         <div hidden={tab !== "entry"}>

@@ -6,7 +6,7 @@ import TruckFilters from "./TruckFilters";
 import TruckSummaryTiles from "./TruckSummaryTiles";
 
 /** The original Trucks list: status tiles, search, and one card per truck. Search also matches the nickname. */
-export default function TruckListPanel({ trucks, summary, onUpdateStatus, onHistory, onEdit }) {
+export default function TruckListPanel({ trucks, loading = false, summary, onUpdateStatus, onHistory, onEdit }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
 
@@ -28,12 +28,18 @@ export default function TruckListPanel({ trucks, summary, onUpdateStatus, onHist
       <TruckSummaryTiles summary={summary} status={status} onSelect={setStatus} />
       <TruckFilters search={search} onSearchChange={setSearch} status={status} onStatusChange={setStatus} summary={summary} />
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <Card>
+          <p className="p-6 text-center text-sm text-fg-muted" aria-live="polite">
+            Loading trucks...
+          </p>
+        </Card>
+      ) : filtered.length === 0 ? (
         <Card>
           <EmptyState
             icon={TruckIcon}
             title="No trucks found"
-            description="Try a different search or status."
+            description={trucks.length === 0 ? "No trucks have been added yet." : "Try a different search or status."}
             action={
               <Button
                 variant="outline"

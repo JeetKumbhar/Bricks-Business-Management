@@ -22,10 +22,12 @@ export const resolveMaterialName = (draft) => {
 /**
  * One draft row: { material (a standard material | Other), customMaterial, destination, quantity (typed text), remarks }.
  * -> { errors: { material?, customMaterial?, destination?, quantity?, remarks? }, value | null }
- * `value` is the cleaned row: { material (the real name), destination, quantity (number), unit, remarks }.
+ * `value` is the cleaned row: { material (the real name), destination, quantity (number), unit, remarks } (+ customerId when requireCustomer: a new Pheera always needs a customer).
  */
-export const validatePheeraDraft = (draft) => {
+export const validatePheeraDraft = (draft, { requireCustomer = false } = {}) => {
   const errors = {};
+  const customerId = String(draft?.customerId ?? "");
+  if (requireCustomer && !customerId) errors.customerId = "Choose a customer";
   const choice = String(draft?.material ?? "");
   const material = resolveMaterialName(draft);
   const destination = normalizeText(draft?.destination);
@@ -58,7 +60,7 @@ export const validatePheeraDraft = (draft) => {
   }
 
   if (Object.keys(errors).length > 0) return { errors, value: null };
-  return { errors, value: { material, destination, quantity, unit: unitForMaterial(material), remarks } };
+  return { errors, value: { material, destination, quantity, unit: unitForMaterial(material), remarks, ...(requireCustomer ? { customerId } : {}) } };
 };
 
 /** Date + truck for the whole batch. `today` is the IST business date. -> { businessDate?, truckId? } */
@@ -74,9 +76,9 @@ export const validateEntryContext = ({ businessDate, truckId, today, trucks }) =
  * Whole batch (what one Save click sends).
  * -> { valid, contextErrors, rowErrors: [{...} per row], values: [cleaned rows], message }
  */
-export const validateBatch = ({ businessDate, truckId, today, trucks, drafts }) => {
+export const validateBatch = ({ businessDate, truckId, today, trucks, drafts, requireCustomer = false }) => {
   const contextErrors = validateEntryContext({ businessDate, truckId, today, trucks });
-  const results = drafts.map(validatePheeraDraft);
+  const results = drafts.map((d) => validatePheeraDraft(d, { requireCustomer }));
   const rowErrors = results.map((r) => r.errors);
   const noRows = drafts.length === 0;
   const valid = !noRows && Object.keys(contextErrors).length === 0 && results.every((r) => r.value);

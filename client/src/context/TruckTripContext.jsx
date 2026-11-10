@@ -1,60 +1,25 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { truckTripService } from "../services/truckTripService";
+import { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
+import { createPheeraStore } from "../features/trucks/pheeraStore";
+import { pheeraService } from "../services/pheeraService";
 
 const TruckTripContext = createContext(null);
 
 /**
- * Holds the Pheera (truck trip) records. All reads and writes go through services/truckTripService.js,
- * so replacing the mock with the real API changes nothing here. Pheera are separate from labour earnings:
- * nothing in this store touches attendance, work entries, production or payments.
+ * Holds the Pheera (truck trip) records for the screens. The logic is in features/trucks/pheeraStore.js (server data only, no
+ * sample-data fallback); this component only connects it to React. `service` can be replaced in tests.
  */
-export function TruckTripProvider({ children, service = truckTripService }) {
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(null);
+export function TruckTripProvider({ children, service = pheeraService }) {
+  const store = useMemo(() => createPheeraStore(service), [service]);
+  const state = useSyncExternalStore(store.subscribe, store.getState);
 
   useEffect(() => {
-    let alive = true;
-    service
-      .listPheeras()
-      .then((list) => {
-        if (alive) setRecords(list);
-      })
-      .catch((error) => {
-        if (alive) setLoadError(error.message ?? "Could not load Pheera records");
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [service]);
-
-  const refresh = useCallback(async () => setRecords(await service.listPheeras()), [service]);
-
-  /** input: { batchId, businessDate, truckId, drafts, trucks, today } -> { records, duplicate } */
-  const savePheeraBatch = useCallback(
-    async (input) => {
-      const result = await service.savePheeraBatch(input);
-      await refresh();
-      return result;
-    },
-    [service, refresh]
-  );
-
-  const deletePheera = useCallback(
-    async (id, reason) => {
-      const result = await service.deletePheera(id, reason);
-      await refresh();
-      return result;
-    },
-    [service, refresh]
-  );
+    store.load();
+    return store.stop;
+  }, [store]);
 
   const value = useMemo(
-    () => ({ records, loading, loadError, savePheeraBatch, deletePheera }),
-    [records, loading, loadError, savePheeraBatch, deletePheera]
+    () => ({ records: state.records, loading: state.loading, loadError: state.loadError, reload: store.load, savePheeraBatch: store.savePheeraBatch, deletePheera: store.deletePheera }),
+    [state, store]
   );
 
   return <TruckTripContext.Provider value={value}>{children}</TruckTripContext.Provider>;

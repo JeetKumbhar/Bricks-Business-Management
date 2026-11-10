@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { CalendarDays, Inbox } from "lucide-react";
 import { Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, Table, useToast } from "../../components/ui";
+import { ApiError, getErrorMessage } from "../../services/api";
 import Pagination from "../../components/common/Pagination";
 import { todayBusinessDate } from "../../utils/businessDate";
 import { formatDate } from "../../utils/formatDate";
@@ -27,7 +28,7 @@ const DAILY_COLUMNS = [
  */
 export default function PheeraHistoryPanel({ lockedTruckId = null }) {
   const toast = useToast();
-  const { trucks, rows, destinations, deletePheera } = useTruckTrips();
+  const { trucks, rows, destinations, loading, loadError, reload, deletePheera } = useTruckTrips();
   const today = todayBusinessDate();
 
   const startFilters = () => (lockedTruckId ? { ...emptyFilters(today), ...presetRange("ALL", today) } : emptyFilters(today));
@@ -53,12 +54,23 @@ export default function PheeraHistoryPanel({ lockedTruckId = null }) {
       await deletePheera(target.id, reason);
       toast.success(`Pheera #${target.pheeraNumber} of ${target.registration} deleted`);
     } catch (error) {
-      toast.error(error?.message ?? "Could not delete");
+      // the server's own message (for example "locked: in a bill") is shown as it is; a lost connection is not "not deleted"
+      const unsure = error instanceof ApiError && error.isConnectionProblem;
+      toast.error(unsure ? `${getErrorMessage(error)} Not confirmed: refresh the list to check.` : `Not deleted: ${error instanceof ApiError ? getErrorMessage(error) : (error?.message ?? "Could not delete")}`);
+      if (unsure) reload();
     }
   };
 
   return (
     <div className="space-y-4 sm:space-y-5">
+      {loadError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
+          <span>Could not load Pheera records: {loadError}</span>
+          <Button variant="outline" size="sm" onClick={reload}>
+            Try again
+          </Button>
+        </div>
+      )}
       <PheeraFilters filters={filters} onChange={changeFilters} trucks={trucks} destinations={destinations} materials={materialFilterOptions(rows)} today={today} hideTruck={Boolean(lockedTruckId)} />
 
       <PheeraSummaryTiles summary={summary} heading="Totals for the filters above" />
@@ -81,7 +93,13 @@ export default function PheeraHistoryPanel({ lockedTruckId = null }) {
         )}
       </Card>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <Card>
+          <CardBody className="text-center text-sm text-fg-muted" aria-live="polite">
+            Loading Pheera...
+          </CardBody>
+        </Card>
+      ) : loadError && rows.length === 0 ? null : filtered.length === 0 ? (
         <Card>
           <EmptyState
             icon={Inbox}

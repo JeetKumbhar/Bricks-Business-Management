@@ -8,9 +8,11 @@ export const MATERIAL_LIST_ID = "pheera-entry-materials";
 /**
  * One Pheera in the entry form. Material is a standard material (Bricks, Sand, Stone, Khadi Matti, Grawal, Hard Murram, Soil) or Other.
  * Bricks ask for "Number of Bricks" (whole numbers); every other material asks for "Weight (Tonnes)". Other also asks for the real material name, which is what gets saved.
- * `errors` only has messages after the first save attempt.
+ * Every Pheera needs a customer (`customerOptions` = [{ value, label }]; Internal / No Bill is one of them when enabled). The Pheera number and the unit are
+ * given by the server, never typed here.
+ * `errors` only has messages after the first save attempt (or come from the server's refusal).
  */
-export default function PheeraRowEditor({ title, draft, errors = {}, duplicateHint, onChange, onRemove }) {
+export default function PheeraRowEditor({ title, draft, errors = {}, duplicateHint, customerOptions = [], onChange, onRemove }) {
   const rule = draft.material ? quantityRule(draft.material) : null;
 
   return (
@@ -28,7 +30,16 @@ export default function PheeraRowEditor({ title, draft, errors = {}, duplicateHi
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Select
+            label="Customer"
+            required
+            placeholder="Select customer"
+            value={draft.customerId ?? ""}
+            onChange={(e) => onChange({ customerId: e.target.value })}
+            options={customerOptions}
+            error={errors.customerId}
+          />
           <Select
             label="Material"
             required

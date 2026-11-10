@@ -3,10 +3,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button, Input, Modal, Select } from "../../components/ui";
 import { DRIVERS_LINKED_TO_LABOUR } from "../../utils/truckStatus";
 import { truckSchema } from "../../validators/truckValidator";
+import UnconfirmedNotice from "./UnconfirmedNotice";
 
 const FORM_ID = "truck-form";
 
-function TruckForm({ truck, drivers, allLabours, isTruckNumberTaken, onSubmit }) {
+const SERVER_FIELDS = ["truckNumber", "nickname", "model", "capacity", "driverId"];
+
+function TruckForm({ truck, drivers, allLabours, isTruckNumberTaken, onSubmit, submitting }) {
   const {
     register,
     handleSubmit,
@@ -30,16 +33,21 @@ function TruckForm({ truck, drivers, allLabours, isTruckNumberTaken, onSubmit })
     if (current) driverOptions.push(current);
   }
 
-  const submit = (values) => {
+  const submit = async (values) => {
     if (isTruckNumberTaken(values.truckNumber, truck?.id)) {
       setError("truckNumber", { type: "validate", message: "This truck number already exists" });
       return;
     }
-    onSubmit(values);
+    // the server's refusal for a field is shown under that field; what the user typed stays in the form
+    const result = await onSubmit(values);
+    for (const [field, message] of Object.entries(result?.fieldErrors ?? {})) {
+      if (SERVER_FIELDS.includes(field)) setError(field, { type: "server", message });
+    }
   };
 
   return (
     <form id={FORM_ID} noValidate onSubmit={handleSubmit(submit)} className="space-y-4">
+      <fieldset disabled={submitting} className="m-0 min-w-0 space-y-4 border-0 p-0">
       <Input
         label="Truck Number"
         required
@@ -69,12 +77,13 @@ function TruckForm({ truck, drivers, allLabours, isTruckNumberTaken, onSubmit })
           {...register("driverId")}
         />
       )}
+      </fieldset>
     </form>
   );
 }
 
 /** Add a truck (truck = null) or edit one. */
-export default function TruckFormModal({ open, truck, drivers, allLabours, isTruckNumberTaken, onClose, onSubmit }) {
+export default function TruckFormModal({ open, truck, drivers, allLabours, isTruckNumberTaken, submitting = false, unconfirmed = null, onRecheck, onClose, onSubmit }) {
   return (
     <Modal
       open={open}
@@ -83,16 +92,17 @@ export default function TruckFormModal({ open, truck, drivers, allLabours, isTru
       description={truck ? truck.truckNumber : "A new truck starts as Working."}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit" form={FORM_ID}>
-            {truck ? "Save Changes" : "Save Truck"}
+          <Button type="submit" form={FORM_ID} loading={submitting} disabled={submitting || Boolean(unconfirmed)}>
+            {submitting ? "Saving..." : truck ? "Save Changes" : "Save Truck"}
           </Button>
         </>
       }
     >
-      <TruckForm truck={truck} drivers={drivers} allLabours={allLabours} isTruckNumberTaken={isTruckNumberTaken} onSubmit={onSubmit} />
+      {unconfirmed && <UnconfirmedNotice message={unconfirmed} onRecheck={onRecheck} busy={submitting} />}
+      <TruckForm truck={truck} drivers={drivers} allLabours={allLabours} isTruckNumberTaken={isTruckNumberTaken} onSubmit={onSubmit} submitting={submitting || Boolean(unconfirmed)} />
     </Modal>
   );
 }

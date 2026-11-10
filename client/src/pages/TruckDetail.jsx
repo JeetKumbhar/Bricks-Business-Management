@@ -19,6 +19,19 @@ export default function TruckDetail() {
 
   const total = useMemo(() => summarizePheeras(filterPheeras(rows, { truckId: id })), [rows, id]);
 
+  if (!truck && (mgmt.loading || mgmt.status === "error")) {
+    return (
+      <Card>
+        <EmptyState
+          icon={TruckIcon}
+          title={mgmt.loading ? "Loading truck..." : "Could not load the truck"}
+          description={mgmt.loading ? undefined : mgmt.loadError}
+          action={mgmt.loading ? undefined : <Button onClick={mgmt.reload}>Try again</Button>}
+        />
+      </Card>
+    );
+  }
+
   if (!truck) {
     return (
       <Card>
