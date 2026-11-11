@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE-WITH-YOUR-BACKEND-HOST/api/:path*"
+      "destination": "https://aayush-carting.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",
