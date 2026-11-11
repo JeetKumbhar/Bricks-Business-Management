@@ -1,4 +1,4 @@
-import { getErrorMessage } from "../../services/api";
+import { ApiError, getErrorMessage } from "../../services/api";
 import { createStore } from "./createStore";
 
 /**
@@ -34,6 +34,24 @@ export function createPheeraStore(service) {
     }
   };
 
+  // One change at a time per Pheera: a second click while the first is running is refused here (no duplicate request).
+  const busy = new Set();
+  const change = async (id, run) => {
+    if (busy.has(id)) throw new Error("Another change to this Pheera is still in progress");
+    busy.add(id);
+    try {
+      const result = await run();
+      await refresh();
+      return result;
+    } catch (error) {
+      // an unsure outcome (lost connection, timeout, 5xx): re-read so the list shows what the server really holds
+      if (error instanceof ApiError && error.isConnectionProblem) await refresh();
+      throw error;
+    } finally {
+      busy.delete(id);
+    }
+  };
+
   return {
     ...store,
     load,
@@ -44,10 +62,9 @@ export function createPheeraStore(service) {
       await refresh();
       return result;
     },
-    async deletePheera(id, reason) {
-      const result = await service.deletePheera(id, reason);
-      await refresh();
-      return result;
-    },
+    deletePheera: (id, reason) => change(id, () => service.deletePheera(id, reason)),
+    correctPheera: (id, changes, reason) => change(id, () => service.correctPheera(id, changes, reason)),
+    assignCustomer: (id, customerId, reason) => change(id, () => service.assignCustomer(id, customerId, reason)),
+    releasePheera: (id, reason) => change(id, () => service.releasePheera(id, reason)),
   };
 }

@@ -18,7 +18,7 @@ export function TruckTripProvider({ children, service = pheeraService }) {
   }, [store]);
 
   const value = useMemo(
-    () => ({ records: state.records, loading: state.loading, loadError: state.loadError, reload: store.load, savePheeraBatch: store.savePheeraBatch, deletePheera: store.deletePheera }),
+    () => ({ records: state.records, loading: state.loading, loadError: state.loadError, reload: store.load, savePheeraBatch: store.savePheeraBatch, deletePheera: store.deletePheera, correctPheera: store.correctPheera, assignCustomer: store.assignCustomer, releasePheera: store.releasePheera }),
     [state, store]
   );
 

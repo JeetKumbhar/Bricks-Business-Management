@@ -3,9 +3,12 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Download, Eye, EyeOff, Printer, Save } from "lucide-react";
 import { Button, Card, CardBody, CardHeader, ConfirmDialog, DatePicker, EmptyState, Input, LoadingState, Select, useToast } from "../components/ui";
 import { useBills } from "../context/BillContext";
+import { useCustomerStore } from "../context/customerContextValue";
+import { splitCustomers } from "../features/customers/customerChoices";
+import useBillDetail from "../features/bills/useBillDetail";
 import { BILL_STATUS, emptyItemDraft, LIMITS, TAX_MODE, TAX_MODE_LABELS } from "../features/bills/billModel";
 import { emptyForm, formFromBill, formSignature, nonLatinFields, previewBillFromForm, taxTypeInfo } from "../features/bills/billForm";
-import { billTotals, knownCustomers } from "../features/bills/billSelectors";
+import { billTotals } from "../features/bills/billSelectors";
 import CustomerSection from "../features/bills/CustomerSection";
 import InvoicePreview from "../features/bills/InvoicePreview";
 import { printInvoice } from "../features/bills/usePrintInvoice";
@@ -19,11 +22,25 @@ import { finalizeProblems, problemsToErrors, validateBillInput } from "../valida
 /** Create a new bill, or edit a DRAFT. Finalized and cancelled bills cannot be opened here. */
 export default function BillEditor() {
   const { id } = useParams();
-  const { bills, settings, loading } = useBills();
+  const { settings, settingsError, loading, reload } = useBills();
+  const { bill: existing, loading: loadingBill, error: billError, reload: reloadBill } = useBillDetail(id ?? null);
   const today = todayBusinessDate();
 
-  if (loading || !settings) return <LoadingState />;
-  const existing = id ? bills.find((b) => b.id === id) : null;
+  if (loading || (id && loadingBill && !existing)) return <LoadingState />;
+  if (!settings) {
+    return (
+      <Card>
+        <EmptyState title="Invoice settings are not available" description={settingsError ?? "They could not be loaded."} action={<Button onClick={reload}>Try again</Button>} />
+      </Card>
+    );
+  }
+  if (id && billError) {
+    return (
+      <Card>
+        <EmptyState title="Could not load this bill" description={billError} action={<Button onClick={reloadBill}>Try again</Button>} />
+      </Card>
+    );
+  }
   if (id && (!existing || existing.status !== BILL_STATUS.DRAFT)) {
     return (
       <Card>
@@ -46,7 +63,8 @@ export default function BillEditor() {
 function BillEditorForm({ initial, existing }) {
   const navigate = useNavigate();
   const toast = useToast();
-  const { bills, settings, saveDraft, finalizeBill } = useBills();
+  const { settings, saveDraft, finalizeBill } = useBills();
+  const customerStore = useCustomerStore();
   const today = todayBusinessDate();
 
   const [form, setForm] = useState(initial);
@@ -58,12 +76,14 @@ function BillEditorForm({ initial, existing }) {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [baseline, setBaseline] = useState(() => formSignature(initial));
   const savingRef = useRef(false);
+  const [saved, setSaved] = useState(existing); // the draft as the SERVER last confirmed it (its id and revision are sent with the next save)
+  const [conflict, setConflict] = useState(null);
 
   const dirty = formSignature(form) !== baseline;
   const previewBill = useMemo(() => previewBillFromForm(form, settings), [form, settings]);
   const totals = useMemo(() => billTotals(previewBill), [previewBill]);
   const check = useMemo(() => validateBillInput({ ...form, allowedRates: settings.allowedTaxRates }), [form, settings]);
-  const savedCustomers = useMemo(() => knownCustomers(bills), [bills]);
+  const savedCustomers = useMemo(() => splitCustomers(customerStore.items).customers, [customerStore.items]);
   const taxInfo = taxTypeInfo(form, settings.stateCode);
   const hints = [...taxInfo.notices, ...nonLatinFields(form).map((f) => `The ${f} has letters the PDF cannot draw. They will show as "?" in the PDF (the on-screen invoice and printing are fine).`)];
   // what the backend needs before a bill can be finalized (only meaningful once the typed values are valid)
@@ -86,7 +106,11 @@ function BillEditorForm({ initial, existing }) {
   const addItem = () => setForm((f) => ({ ...f, items: [...f.items, emptyItemDraft({ taxRate: f.items[f.items.length - 1]?.taxRate ?? "" })] }));
   const removeItem = (index) => setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== index) }));
 
-  const persist = () => saveDraft({ id: existing?.id, revision: existing?.revision, billDate: form.billDate, customer: form.customer, items: form.items, taxMode: form.taxMode, notes: form.notes });
+  const persist = async () => {
+    const bill = await saveDraft({ id: saved?.id, revision: saved?.revision, billDate: form.billDate, customer: form.customer, items: form.items, taxMode: form.taxMode, notes: form.notes });
+    setSaved(bill);
+    return bill;
+  };
 
   const run = async (action, { complete = false } = {}) => {
     if (savingRef.current) return false;
@@ -101,6 +125,7 @@ function BillEditorForm({ initial, existing }) {
       return false;
     }
     setFinalProblems([]);
+    setConflict(null);
     savingRef.current = true;
     setSaving(true);
     try {
@@ -108,7 +133,9 @@ function BillEditorForm({ initial, existing }) {
       return true;
     } catch (error) {
       if (error?.problems) setFinalProblems(error.problems);
-      toast.error(error?.message ?? "Could not save the bill");
+      // 409 = the draft was changed elsewhere (or is no longer a draft): nothing was saved and what was typed stays here
+      setConflict(error?.status === 409 ? error.message : null);
+      toast.error(error?.isConnectionProblem ? `${error.message} Not confirmed: check the Bills list before saving again.` : (error?.message ?? "Could not save the bill"));
       return false;
     } finally {
       savingRef.current = false;
@@ -120,7 +147,7 @@ function BillEditorForm({ initial, existing }) {
     run(async () => {
       const bill = await persist();
       setBaseline(formSignature(form));
-      toast.success("Draft saved (kept in this browser only)");
+      toast.success("Draft saved");
       navigate(`/bills/${bill.id}`);
     });
 
@@ -170,6 +197,17 @@ function BillEditorForm({ initial, existing }) {
           <p className="mt-1 text-sm text-fg-muted">Fill the sections, check the preview, then save as a draft or finalize.</p>
         </div>
       </div>
+
+      {conflict && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
+          <span>{conflict}. Nothing was saved and your entries are still here.</span>
+          {saved && (
+            <Link to={`/bills/${saved.id}`} className="font-medium underline">
+              Open the latest version
+            </Link>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
         <div className="space-y-4 sm:space-y-5 lg:col-span-2">

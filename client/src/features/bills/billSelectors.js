@@ -2,8 +2,29 @@
 import { BILL_STATUS } from "./billModel";
 import { computeInvoice, deriveTaxType } from "./billCalculations";
 
+const hasServerTotals = (bill) => Number.isInteger(bill.grandTotalPaise);
+
+/**
+ * A bill that came from the server carries the server's own totals: those are shown as they are (the server is the authority).
+ * The same names as computeInvoice give. A list row has no items, so it has no per-rate text.
+ */
+const serverTotals = (bill) => {
+  const cgstPaise = bill.cgstPaise ?? 0;
+  const sgstPaise = bill.sgstPaise ?? 0;
+  const igstPaise = bill.igstPaise ?? 0;
+  const taxPaise = bill.listOnly ? (bill.gstPaise ?? 0) : cgstPaise + sgstPaise + igstPaise;
+  const rates = [...new Set((bill.items ?? []).map((i) => i.taxRate).filter((r) => r > 0))];
+  const text = (divisor) => (bill.taxMode !== "GST" || bill.taxPending || rates.length === 0 ? "" : rates.length === 1 ? String(rates[0] / divisor) : "mixed");
+  return {
+    taxMode: bill.taxMode, taxType: bill.taxType ?? null, taxPending: Boolean(bill.taxPending),
+    lines: (bill.items ?? []).map((i) => ({ amountPaise: i.taxablePaise, taxRateBp: i.taxRateBp, cgstPaise: i.cgstPaise, sgstPaise: i.sgstPaise, igstPaise: i.igstPaise, totalPaise: i.totalPaise })),
+    taxablePaise: bill.taxableTotalPaise, slabs: [], cgstPaise, sgstPaise, igstPaise, taxPaise, grandPaise: bill.grandTotalPaise,
+    cgstRateText: text(2), sgstRateText: text(2), igstRateText: text(1),
+  };
+};
+
 /** Totals of a bill, always calculated from its items (never from a stored or typed total). Tax type comes from the state codes. */
-export const billTotals = (bill) => computeInvoice(bill.items, bill.taxMode, deriveTaxType(bill.seller?.stateCode, bill.customer.stateCode));
+export const billTotals = (bill) => (hasServerTotals(bill) ? serverTotals(bill) : computeInvoice(bill.items, bill.taxMode, deriveTaxType(bill.seller?.stateCode, bill.customer.stateCode)));
 
 /** What a bill is called on screen: its number, or "Draft" while it has none. */
 export const billLabel = (bill) => bill.billNumber ?? "Draft";

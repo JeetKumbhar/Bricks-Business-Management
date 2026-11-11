@@ -77,9 +77,10 @@ export const toSettingsRequest = (s) => ({
 /** A bill from the API -> the shape the screens use. The API sends the rate in paise; the screens use rupees. */
 export const fromBillDto = (dto) => ({
   ...dto,
-  items: (dto.items ?? []).map((it) => ({ particulars: it.particulars, hsn: it.hsn ?? "", quantity: it.quantity, unit: it.unit, rate: it.ratePaise / 100, taxRate: it.taxRate ?? null })),
+  items: (dto.items ?? []).map((it) => ({ ...it, particulars: it.particulars, hsn: it.hsn ?? "", quantity: it.quantity, unit: it.unit, rate: it.ratePaise / 100, taxRate: it.taxRate ?? null })),
   customer: { name: "", address: "", gstin: "", stateName: "", stateCode: "", contact: "", ...dto.customer },
   notes: dto.notes ?? "",
+  seller: dto.seller ?? null,
 });
 
 /** Settings from the API -> the shape the screens use (missing lists become empty lists). */

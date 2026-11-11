@@ -9,12 +9,14 @@ export default function useTruckTrips() {
   const store = useTruckTripStore();
 
   const rows = useMemo(() => decoratePheeras(store.records, trucks), [store.records, trucks]);
+  const voidedRows = useMemo(() => decoratePheeras(store.records, trucks, { voided: true }), [store.records, trucks]);
   const destinations = useMemo(() => knownDestinations(rows), [rows]);
 
 
   return {
     trucks,
     rows,
+    voidedRows, // voided records only (kept for the record)
     allRecords: store.records, // includes soft-deleted ones (numbering needs them)
     destinations,
     loading: store.loading,
@@ -22,5 +24,8 @@ export default function useTruckTrips() {
     savePheeraBatch: store.savePheeraBatch,
     reload: store.reload,
     deletePheera: store.deletePheera,
+    correctPheera: store.correctPheera,
+    assignCustomer: store.assignCustomer,
+    releasePheera: store.releasePheera,
   };
 }

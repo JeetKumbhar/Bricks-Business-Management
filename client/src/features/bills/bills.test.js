@@ -390,7 +390,7 @@ describe("backend request and response mappers", () => {
   });
   it("reads a bill from the API (rate comes in paise) and settings with missing lists", () => {
     const bill = fromBillDto({ id: "1", billNumber: "AC/2026-27/0001", status: "FINALIZED", customer: { name: "A" }, items: [{ particulars: "Bricks", hsn: "6901", quantity: 2.5, unit: "Bricks", ratePaise: 825, taxRate: 5 }] });
-    expect(bill.items[0]).toEqual({ particulars: "Bricks", hsn: "6901", quantity: 2.5, unit: "Bricks", rate: 8.25, taxRate: 5 });
+    expect(bill.items[0]).toMatchObject({ particulars: "Bricks", hsn: "6901", quantity: 2.5, unit: "Bricks", rate: 8.25, taxRate: 5 });
     expect(bill.customer).toMatchObject({ name: "A", address: "", stateName: "", contact: "" });
     expect(fromBillDto({ id: "2", customer: {}, items: [{ particulars: "x", quantity: 1, unit: "u", ratePaise: 100, taxRate: null }] }).items[0].taxRate).toBeNull();
     const s = fromSettingsDto({ businessName: "A", numbering: { prefix: "AC" } });

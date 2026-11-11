@@ -14,13 +14,13 @@ import { useBills } from "../context/BillContext";
 const NO_FILTERS = { search: "", from: "", to: "", status: "" };
 
 /**
- * Bills: create and manage customer invoices. Data is kept in the browser in this phase (see services/billService.js):
- * it is not saved to a database and resets when the page is reloaded.
+ * Bills: create and manage customer invoices. The list comes from the server (customer, number, date, status and the server's totals);
+ * a bill's items are read from the server only when it is printed or downloaded.
  */
 export default function Bills() {
   const navigate = useNavigate();
   const toast = useToast();
-  const { bills, loading, loadError, finalizeBill, cancelBill, discardDraft } = useBills();
+  const { bills, loading, loadError, reload, loadBill, finalizeBill, cancelBill, discardDraft } = useBills();
   const { print, host } = usePrintBill();
   const [filters, setFilters] = useState(NO_FILTERS);
   const [finalizing, setFinalizing] = useState(null);
@@ -36,7 +36,7 @@ export default function Bills() {
     const bill = finalizing;
     setFinalizing(null);
     try {
-      const done = await finalizeBill(bill.id);
+      const done = await finalizeBill(bill.id, { revision: bill.revision });
       toast.success(`Bill ${done.billNumber} finalized`);
     } catch (error) {
       toast.error(finalizeErrorText(error));
@@ -59,14 +59,24 @@ export default function Bills() {
     }
   };
 
-  const download = (bill) => {
+  // the list has no items, so the full bill is read from the server first (print and PDF always use the server's data)
+  const withFullBill = async (row, onLoaded) => {
     try {
-      downloadInvoicePdf(bill);
-      toast.success("PDF downloaded");
+      onLoaded(await loadBill(row.id));
     } catch (error) {
-      toast.error(error?.message ?? "Could not create the PDF");
+      toast.error(error?.message ?? "Could not load the bill");
     }
   };
+  const printRow = (row) => withFullBill(row, print);
+  const download = (row) =>
+    withFullBill(row, (bill) => {
+      try {
+        downloadInvoicePdf(bill);
+        toast.success("PDF downloaded");
+      } catch (error) {
+        toast.error(error?.message ?? "Could not create the PDF");
+      }
+    });
 
   if (loading) return <LoadingState />;
 
@@ -83,13 +93,15 @@ export default function Bills() {
       </div>
 
       {loadError && (
-        <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
-          Could not load bills: {loadError}
-        </p>
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
+          <span>Could not load bills: {loadError}</span>
+          <Button variant="outline" size="sm" onClick={reload}>
+            Try again
+          </Button>
+        </div>
       )}
 
       <BillSummaryCards summary={summary} />
-      <p className="type-small">Sample data kept in the browser. Bills you save here are simulated locally (not stored in a database) and reset when the page is reloaded.</p>
 
       <Card>
         <CardBody className="space-y-3">
@@ -118,7 +130,7 @@ export default function Bills() {
         </CardBody>
       </Card>
 
-      {bills.length === 0 ? (
+      {bills.length === 0 && loadError ? null : bills.length === 0 ? (
         <Card>
           <EmptyState
             icon={FileText}
@@ -138,7 +150,7 @@ export default function Bills() {
               bills={visible}
               onView={(b) => navigate(`/bills/${b.id}`)}
               onEdit={(b) => navigate(`/bills/${b.id}/edit`)}
-              onPrint={print}
+              onPrint={printRow}
               onDownload={download}
               onFinalize={setFinalizing}
               onCancel={setCancelling}

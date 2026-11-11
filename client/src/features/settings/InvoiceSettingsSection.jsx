@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FileText } from "lucide-react";
 import { Button, Card, CardBody, CardHeader, Input, LoadingState, Select, Textarea, useToast } from "../../components/ui";
 import { useBills } from "../../context/BillContext";
+import { getFieldErrors } from "../../services/api";
 import { financialYear, formatBillNumber } from "../bills/billNumbering";
 import { TAX_MODE_LABELS } from "../bills/billModel";
 import { todayBusinessDate } from "../../utils/businessDate";
@@ -24,8 +25,16 @@ const fromForm = (f) => ({
  * Bills already finalized keep the details they were finalized with; a change here only affects drafts and new bills.
  */
 export default function InvoiceSettingsSection() {
-  const { settings, saveSettings } = useBills();
+  const { settings, settingsError, loading, reload, saveSettings } = useBills();
   // the settings load a moment after the app starts; the form is built only once they are there
+  if (!settings && settingsError && !loading) {
+    return (
+      <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
+        <span>Invoice settings could not be loaded: {settingsError}</span>
+        <Button variant="outline" size="sm" onClick={reload}>Try again</Button>
+      </div>
+    );
+  }
   if (!settings) return <LoadingState />;
   return <InvoiceSettingsForm settings={settings} saveSettings={saveSettings} />;
 }
@@ -56,8 +65,9 @@ function InvoiceSettingsForm({ settings, saveSettings }) {
     try {
       const saved = await saveSettings(candidate);
       setForm(toForm(saved));
-      toast.success("Invoice settings saved (kept in this browser only)");
+      toast.success("Invoice settings saved");
     } catch (error) {
+      setErrors((e) => ({ ...e, ...getFieldErrors(error) })); // the server's own field messages (for example GSTIN and state code)
       toast.error(error?.message ?? "Could not save the settings");
     } finally {
       setSaving(false);

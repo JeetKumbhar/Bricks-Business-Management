@@ -2,6 +2,9 @@ import { useMemo, useState } from "react";
 import { CalendarDays, Inbox } from "lucide-react";
 import { Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, Table, useToast } from "../../components/ui";
 import { ApiError, getErrorMessage } from "../../services/api";
+import useCustomerChoices from "../customers/useCustomerChoices";
+import { AssignCustomerModal, CorrectPheeraModal, ReleasePheeraModal } from "./PheeraActionModals";
+import { runPheeraAction } from "./pheeraActionFlow";
 import Pagination from "../../components/common/Pagination";
 import { todayBusinessDate } from "../../utils/businessDate";
 import { formatDate } from "../../utils/formatDate";
@@ -28,7 +31,8 @@ const DAILY_COLUMNS = [
  */
 export default function PheeraHistoryPanel({ lockedTruckId = null }) {
   const toast = useToast();
-  const { trucks, rows, destinations, loading, loadError, reload, deletePheera } = useTruckTrips();
+  const { trucks, rows, voidedRows, destinations, loading, loadError, reload, deletePheera, correctPheera, assignCustomer, releasePheera } = useTruckTrips();
+  const choices = useCustomerChoices();
   const today = todayBusinessDate();
 
   const startFilters = () => (lockedTruckId ? { ...emptyFilters(today), ...presetRange("ALL", today) } : emptyFilters(today));
@@ -36,6 +40,9 @@ export default function PheeraHistoryPanel({ lockedTruckId = null }) {
   const [page, setPage] = useState(1);
   const [showDaily, setShowDaily] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [action, setAction] = useState(null); // { kind: "correct" | "assign" | "release", record }
+  const [acting, setActing] = useState(false);
+  const [showVoided, setShowVoided] = useState(false);
 
   const filtered = useMemo(() => sortPheeras(filterPheeras(rows, { ...filters, truckId: lockedTruckId ?? filters.truckId }), "newest"), [rows, filters, lockedTruckId]);
   const summary = useMemo(() => summarizePheeras(filtered), [filtered]);
@@ -52,7 +59,7 @@ export default function PheeraHistoryPanel({ lockedTruckId = null }) {
     setDeleting(null);
     try {
       await deletePheera(target.id, reason);
-      toast.success(`Pheera #${target.pheeraNumber} of ${target.registration} deleted`);
+      toast.success(`Pheera #${target.pheeraNumber} of ${target.registration} deleted (voided). It stays in the history.`);
     } catch (error) {
       // the server's own message (for example "locked: in a bill") is shown as it is; a lost connection is not "not deleted"
       const unsure = error instanceof ApiError && error.isConnectionProblem;
@@ -60,6 +67,28 @@ export default function PheeraHistoryPanel({ lockedTruckId = null }) {
       if (unsure) reload();
     }
   };
+
+  const describe = (r) => `Pheera #${r.pheeraNumber} of ${r.registration}`;
+  // Runs a correct / assign / release. A refusal keeps the dialog open (the dialog shows the server's message); an unsure outcome
+  // closes it, because the store has already re-read the list: the person checks the record instead of sending it again.
+  const perform = async (run, doneText) => {
+    const target = action.record;
+    setActing(true);
+    const outcome = await runPheeraAction(run);
+    setActing(false);
+    if (outcome.ok) {
+      setAction(null);
+      toast.success(`${describe(target)}: ${doneText}`);
+    } else if (outcome.unsure) {
+      setAction(null);
+      toast.error(`${outcome.message} Not confirmed: the list was refreshed. Check ${describe(target)} before trying again.`);
+    }
+    return outcome;
+  };
+  const submitCorrection = ({ changes, reason }) => perform(() => correctPheera(action.record.id, changes, reason), "corrected");
+  const submitAssign = ({ customerId, reason }) => perform(() => assignCustomer(action.record.id, customerId, reason), "customer saved");
+  const submitRelease = ({ reason }) => perform(() => releasePheera(action.record.id, reason), "released, it can be billed again");
+  const closeAction = () => !acting && setAction(null);
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -116,11 +145,34 @@ export default function PheeraHistoryPanel({ lockedTruckId = null }) {
         <Card>
           <CardHeader title="Pheera" subtitle={`${filtered.length} found, newest first`} />
           <CardBody className="space-y-4">
-            <PheeraTable rows={view.items} onDelete={setDeleting} showTruck={!lockedTruckId} />
+            <PheeraTable rows={view.items} onDelete={setDeleting} onCorrect={(r) => setAction({ kind: "correct", record: r })} onAssign={(r) => setAction({ kind: "assign", record: r })} onRelease={(r) => setAction({ kind: "release", record: r })} showTruck={!lockedTruckId} />
             <Pagination page={view.page} pageCount={view.pageCount} onPageChange={setPage} />
           </CardBody>
         </Card>
       )}
+
+      {voidedRows.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Deleted (voided) Pheera"
+            subtitle={`${voidedRows.length} kept for the record. Their numbers are never reused.`}
+            action={
+              <Button variant="outline" size="sm" onClick={() => setShowVoided((v) => !v)} aria-expanded={showVoided}>
+                {showVoided ? "Hide" : "Show"}
+              </Button>
+            }
+          />
+          {showVoided && (
+            <CardBody>
+              <PheeraTable rows={sortPheeras(lockedTruckId ? voidedRows.filter((r) => r.truckId === lockedTruckId) : voidedRows, "newest")} showTruck={!lockedTruckId} />
+            </CardBody>
+          )}
+        </Card>
+      )}
+
+      <CorrectPheeraModal record={action?.kind === "correct" ? action.record : null} submitting={acting} onClose={closeAction} onSubmit={submitCorrection} />
+      <AssignCustomerModal record={action?.kind === "assign" ? action.record : null} choices={choices} submitting={acting} onClose={closeAction} onSubmit={submitAssign} />
+      <ReleasePheeraModal record={action?.kind === "release" ? action.record : null} submitting={acting} onClose={closeAction} onSubmit={submitRelease} />
 
       <ConfirmDialog
         open={Boolean(deleting)}

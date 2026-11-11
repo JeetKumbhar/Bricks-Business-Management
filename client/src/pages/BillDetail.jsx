@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Ban, CheckCircle2, Download, Pencil, Printer } from "lucide-react";
 import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, LoadingState, useToast } from "../components/ui";
 import { useBills } from "../context/BillContext";
+import useBillDetail from "../features/bills/useBillDetail";
 import { BILL_STATUS, TAX_MODE_LABELS, TAX_TYPE_LABELS } from "../features/bills/billModel";
 import { billLabel, billTotals } from "../features/bills/billSelectors";
 import BillStatusBadge from "../features/bills/BillStatusBadge";
@@ -21,12 +22,19 @@ export default function BillDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const { bills, loading, finalizeBill, cancelBill, discardDraft } = useBills();
+  const { finalizeBill, cancelBill, discardDraft } = useBills();
+  const { bill, loading, error: loadError, reload, setBill } = useBillDetail(id);
   const [finalizing, setFinalizing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
-  if (loading) return <LoadingState />;
-  const bill = bills.find((b) => b.id === id);
+  if (loading && !bill) return <LoadingState />;
+  if (loadError) {
+    return (
+      <Card>
+        <EmptyState title="Could not load this bill" description={loadError} action={<Button onClick={reload}>Try again</Button>} />
+      </Card>
+    );
+  }
   if (!bill) {
     return (
       <Card>
@@ -43,10 +51,12 @@ export default function BillDetail() {
   const doFinalize = async () => {
     setFinalizing(false);
     try {
-      const result = await finalizeBill(bill.id);
+      const result = await finalizeBill(bill.id, { revision: bill.revision });
+      setBill(result); // the bill exactly as the server now holds it
       toast.success(`Bill ${result.billNumber} finalized`);
     } catch (error) {
       toast.error(finalizeErrorText(error));
+      if (error?.status === 409 || error?.isConnectionProblem) reload(); // somebody changed it, or the outcome is unsure: show what the server holds
     }
   };
   // a draft has no number and was never issued, so it is discarded; only a finalized bill is cancelled (with a reason)
@@ -58,11 +68,12 @@ export default function BillDetail() {
         toast.success("Draft discarded");
         navigate("/bills");
       } else {
-        await cancelBill(bill.id, reason);
-        toast.success(`Bill ${bill.billNumber} cancelled`);
+        setBill(await cancelBill(bill.id, reason));
+        toast.success(`Bill ${bill.billNumber} cancelled. It stays in the list for the record.`);
       }
     } catch (error) {
       toast.error(error?.message ?? "Could not cancel");
+      if (error?.status === 409 || error?.isConnectionProblem) reload();
     }
   };
   const download = () => {
@@ -112,7 +123,7 @@ export default function BillDetail() {
           This bill was cancelled{bill.cancelledAt ? ` on ${stamp(bill.cancelledAt)}` : ""}. Reason: {bill.cancelledReason}. It is kept for the record and no longer counts as invoiced.
         </p>
       )}
-      {bill.status === BILL_STATUS.FINAL && <p className="type-small">This bill is finalized and read-only.</p>}
+      {bill.status === BILL_STATUS.FINAL && <p className="type-small">This bill is finalized and read-only.{bill.finalizedBy ? ` Finalized by ${bill.finalizedBy}.` : ""}</p>}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">

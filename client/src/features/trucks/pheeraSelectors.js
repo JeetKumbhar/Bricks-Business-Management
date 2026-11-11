@@ -7,9 +7,9 @@ import { activePheeras } from "./pheeraOps";
 const addTonnes = (a, b) => Math.round(a * 100 + b * 100) / 100;
 
 /** Active records plus the truck's CURRENT registration number (falls back to the saved snapshot). */
-export const decoratePheeras = (records, trucks) => {
+export const decoratePheeras = (records, trucks, { voided = false } = {}) => {
   const byId = Object.fromEntries(trucks.map((t) => [t.id, t]));
-  return activePheeras(records).map((r) => ({
+  return (voided ? records.filter((r) => r.isDeleted || r.isVoided) : activePheeras(records)).map((r) => ({
     ...r,
     registration: byId[r.truckId]?.truckNumber ?? r.truckRegistration,
     truckNickname: byId[r.truckId]?.nickname ?? "",
