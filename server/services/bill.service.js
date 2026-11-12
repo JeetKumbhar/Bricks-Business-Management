@@ -122,7 +122,7 @@ export const createDraft = async (body, actor, base = {}, { session = null, fiel
       isDeleted: false, createdBy: actorOf(actor).id, createdByName: actorOf(actor).name, updatedBy: actorOf(actor).id, updatedByName: actorOf(actor).name, ...fields,
     },
   ], session ? { session } : undefined);
-  return toBillDto(created.toObject ? created.toObject() : created);
+  return toBillDto(created.toObject ? created.toObject({ transform: false }) : created);
 };
 
 /** Pheera lines of a draft: the owner may change particulars, HSN, rate and tax rate, but quantity and unit come from the Pheera. A line left out is removed (its Pheera is released). */

@@ -24,14 +24,22 @@
 
 import mongoose from "mongoose";
 import { env } from "../config/env.js";
-import Customer from "../models/Customer.js";
-import Bill from "../models/Bill.js";
-import TruckTrip from "../models/TruckTrip.js";
+import { NetworkError, createHttp, createReport, recoverUncertainWrite, sanitize } from "./lib/phase4Http.js";
 
 const BASE = (process.env.API_BASE || "http://localhost:5000/api").replace(/\/+$/, "");
 const EMAIL = process.env.OWNER_EMAIL;
 const PASSWORD = process.env.OWNER_PASSWORD;
 const origin = process.env.CLIENT_ORIGIN_FOR_TEST || "http://localhost:5173"; // must be listed in the server's CLIENT_ORIGIN
+
+// Read-only database use: Mongoose must not create collections or build indexes when this script connects (the index checks below
+// must report what the backend's database REALLY has, not what this script just built).
+mongoose.set("autoIndex", false);
+mongoose.set("autoCreate", false);
+// The models are loaded only now: Mongoose reads these two settings at the moment a model is defined, so a static import (which runs
+// first) would already have scheduled automatic index building.
+const { default: Customer } = await import("../models/Customer.js");
+const { default: Bill } = await import("../models/Bill.js");
+const { default: TruckTrip } = await import("../models/TruckTrip.js");
 
 // ---- safety gate ------------------------------------------------------------------------------------------------------------------
 const stop = (message) => {
@@ -50,29 +58,39 @@ const dbName = (() => {
 if (!dbName) stop("MONGODB_URI has no database name. Add one that ends with _test, for example /brickpro_test.");
 if (!/_test$/i.test(dbName)) stop(`the database name "${dbName}" does not end with "_test". Refusing: use a dedicated TEST database named like brickpro_test.`);
 if (process.env.PHASE4_CONFIRM_DB !== dbName) stop(`set PHASE4_CONFIRM_DB=${dbName} to confirm that "${dbName}" is the TEST database you mean.`);
+try {
+  const parsed = new URL(BASE);
+  if (!/^https?:$/.test(parsed.protocol)) throw new Error("not http(s)");
+} catch {
+  stop("API_BASE is not a valid http(s) URL (example: http://localhost:5000/api).");
+}
 console.log(`Database: ${dbName}  (confirmed as TEST by PHASE4_CONFIRM_DB)\nServer:   ${BASE}\n`);
 
 // ---- helpers ----------------------------------------------------------------------------------------------------------------------
-let cookie = "";
-const call = async (method, path, body, { noCookie = false } = {}) => {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: { Accept: "application/json", Origin: origin, ...(body !== undefined ? { "Content-Type": "application/json" } : {}), ...(cookie && !noCookie ? { Cookie: cookie } : {}) },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+const http = createHttp({
+  baseUrl: BASE,
+  origin,
+  secrets: [PASSWORD, uri],
+  onRetry: ({ method, path, attempt, code }) => console.log(`RETRY ${method} ${path}: no answer (${code}), trying again (attempt ${attempt + 1}). Only safe GET requests are retried.`),
+});
+const call = http.call;
+const report = createReport();
+const { check } = report;
+
+/**
+ * Finalize / cancel are state changes. If the backend drops the connection while one is in flight its outcome is UNKNOWN, so it is never
+ * blindly repeated: wait for the backend, read the bill, and only repeat if the read proves the change was NOT applied. The lost
+ * connection itself is always reported as INCONCLUSIVE (the backend dropped a connection: check its log), even if the state is recovered.
+ */
+const writeWithRecovery = async (method, path, body, billId, appliedStatus, notYetStatus) => {
+  const { response, recovered, lost } = await recoverUncertainWrite({
+    request: () => call(method, path, body),
+    reread: () => call("GET", `/bills/${billId}`),
+    applied: (r) => (r.status === 200 && r.data?.status === appliedStatus ? true : r.status === 200 && r.data?.status === notYetStatus ? false : null),
+    probe: () => http.probeBackend(),
   });
-  const token = (res.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).find((c) => c.startsWith("brickpro_token="));
-  if (token) cookie = token;
-  let json = null;
-  try { json = await res.json(); } catch { /* not JSON */ }
-  return { status: res.status, json, data: json?.data, meta: json?.meta, message: json?.message, errors: json?.errors ?? [] };
-};
-let passed = 0;
-let failed = 0;
-const check = (name, ok, detail) => {
-  if (ok) passed += 1;
-  else failed += 1;
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${ok ? "" : `   -> ${typeof detail === "string" ? detail : JSON.stringify(detail)}`}`);
-  return ok;
+  if (lost) report.inconclusive(`${lost.method} ${lost.path}: connection lost`, `${lost.message}. The bill was re-read afterwards (${recovered === "applied" ? "the change HAD been applied" : "the change had NOT been applied and was sent once more"}). Look at the backend window around this time for the cause.`);
+  return response;
 };
 class Halt extends Error {}
 /** A CRITICAL check: on failure the run stops at once (nothing that depends on it may run). */
@@ -81,7 +99,7 @@ const must = (name, ok, detail) => {
   throw new Halt(name);
 };
 /** A response that later steps depend on: the expected status AND an id in the data. */
-const created = (name, r, status = 201) => must(name, r.status === status && Boolean(r.data?.id), `${r.status} ${r.message ?? ""} ${JSON.stringify(r.errors ?? [])}`);
+const created = (name, r, status = 201) => must(name, r.status === status && /^[0-9a-f]{24}$/.test(String(r.data?.id)), `${r.status} ${r.message ?? ""} ${JSON.stringify(r.errors ?? [])}`);
 const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" });
 const day = (back) => fmt.format(new Date(Date.now() - back * 86400000));
 const stamp = String(Date.now()).slice(-7);
@@ -107,7 +125,7 @@ const main = async () => {
   // Checkpoint A: authentication (the first backend write is the login's last-login time, on the already proven TEST database)
   check("unauthenticated request is refused (401)", (await call("GET", "/customers", undefined, { noCookie: true })).status === 401);
   const login = await call("POST", "/auth/login", { email: EMAIL, password: PASSWORD });
-  must("owner login", login.status === 200 && Boolean(cookie), `${login.status} ${login.message}`);
+  must("owner login", login.status === 200 && http.hasCookie(), `${login.status} ${login.message}`);
   must("auth/me returns the owner", (await call("GET", "/auth/me")).status === 200);
   check("a malformed id is a 400, not a crash", (await call("GET", "/truck-trips/not-an-id")).status === 400);
 
@@ -126,7 +144,7 @@ const main = async () => {
     settings = await call("GET", "/invoice-settings");
   }
   const sellerReady = Boolean(settings.data?.businessName && settings.data?.address && settings.data?.gstin && settings.data?.stateCode);
-  if (!sellerReady) console.log("NOTE  seller details are incomplete in the TEST invoice settings: finalize checks will be skipped. Re-run with --set-test-settings.");
+  if (!sellerReady) report.skip("finalize, PDF, cancel and release checks", "seller details are incomplete in the TEST invoice settings; re-run with --set-test-settings");
 
   // customers
   const custA = await call("POST", "/customers", { name: `ZZ P4 Alpha ${stamp}`, address: "1 Alpha Road", stateName: "Maharashtra", stateCode: "27" });
@@ -221,7 +239,7 @@ const main = async () => {
     check("DB: discarding released its Pheera (UNBILLED, no bill)", afterDiscard.billingStatus === "UNBILLED" && afterDiscard.billId === null, JSON.stringify([afterDiscard.billingStatus, afterDiscard.billId]));
     check("DB: the discarded draft is kept hidden, not deleted", Boolean(await dbBill(raceBill)));
   } else {
-    check("discard a draft (SKIPPED: the race produced no draft to discard)", false, "no winning draft id");
+    report.skip("discard a draft and its DB checks", "the race produced no draft to discard (see the race check above)");
   }
 
   // pricing: independent arithmetic. 1000 bricks at 5500/1000 = 5500.00; 4.5 tonnes at 700 = 3150.00; GST 5% intra-state
@@ -255,7 +273,7 @@ const main = async () => {
     check("manual bill finalizes after the fix (no Pheeras involved)", manualFin.status === 200 && manualFin.data?.status === "FINALIZED" && manualFin.data?.grandTotalPaise === 118000, `${manualFin.status} ${manualFin.message}`);
 
     // finalize the Pheera bill
-    const fin = await call("POST", `/bills/${billId}/finalize`, { reviewed: true, revision: patch.data.revision });
+    const fin = await writeWithRecovery("POST", `/bills/${billId}/finalize`, { reviewed: true, revision: patch.data.revision }, billId, "FINALIZED", "DRAFT");
     must("finalize the Pheera bill", fin.status === 200 && fin.data?.status === "FINALIZED" && Boolean(fin.data?.billNumber), `${fin.status} ${fin.message} ${JSON.stringify(fin.errors)}`);
     const f1 = await dbTrip(id(P1));
     const f2 = await dbTrip(id(P2));
@@ -265,11 +283,11 @@ const main = async () => {
     check("a finalized bill cannot be discarded", (await call("POST", `/bills/${billId}/discard`, {})).status >= 400);
     check("a BILLED Pheera cannot be billed again (409)", (await call("POST", "/bills/from-trips", { tripIds: [id(P1)], requestId: rid("again") })).status === 409);
     check("a BILLED Pheera cannot be voided or corrected while billed", (await call("POST", `/truck-trips/${id(P1)}/void`, { reason: "should fail" })).status === 409);
-    const pdf = await fetch(`${BASE}/bills/${billId}/pdf`, { headers: { Cookie: cookie, Origin: origin } });
-    check("server PDF of a finalized bill", pdf.status === 200 && (pdf.headers.get("content-type") ?? "").includes("pdf") && (await pdf.arrayBuffer()).byteLength > 1000, `${pdf.status}`);
+    const pdf = await call("GET", `/bills/${billId}/pdf`, undefined, { raw: true });
+    check("server PDF of a finalized bill", pdf.status === 200 && pdf.contentType.includes("pdf") && pdf.byteLength > 1000, `${pdf.status}`);
 
     // cancel
-    const can = await call("POST", `/bills/${billId}/cancel`, { reason: "Phase 4 cancel" });
+    const can = await writeWithRecovery("POST", `/bills/${billId}/cancel`, { reason: "Phase 4 cancel" }, billId, "CANCELLED", "FINALIZED");
     must("cancel the finalized bill", can.status === 200 && can.data?.status === "CANCELLED" && can.data?.billNumber === fin.data.billNumber, `${can.status} ${can.message}`);
     const c1 = await dbTrip(id(P1));
     check("DB: cancelling did NOT release the Pheeras (still BILLED, still linked)", c1.billingStatus === "BILLED" && oid(c1.billId) === billId, JSON.stringify([c1.billingStatus, c1.billId]));
@@ -285,16 +303,40 @@ const main = async () => {
   check("invoice settings keep their values after the run", (await call("GET", "/invoice-settings")).status === 200);
 };
 
+let infrastructureFailure = false;
 try {
   await main();
 } catch (error) {
   if (error instanceof Halt) console.log(`\nHALTED at a critical check: ${error.message}. No further step was run.`);
-  else {
-    failed += 1;
-    console.log(`FAIL  unexpected error: ${error?.message}. The run was stopped.`);
+  else if (error instanceof NetworkError) {
+    infrastructureFailure = true;
+    const probe = await http.probeBackend();
+    console.log(`\nINFRASTRUCTURE FAILURE (not an application result): ${error.message}`);
+    console.log(
+      probe.reachable
+        ? `  The backend still answers GET /health (HTTP ${probe.status}) now, so it is running: this request was cut off or timed out. Check the backend window for an error printed at that moment.`
+        : `  The backend does NOT answer GET /health now (${probe.code}). It stopped or is restarting (note: "npm run dev" restarts when a source file is saved, and a crash is printed in the backend window as "[server] uncaught exception" or "unhandled rejection"). Look at the backend window, start it again, and re-run.`
+    );
+    if (error.uncertain) {
+      report.inconclusive(`${error.method} ${error.path}`, "no answer was received, so it is UNKNOWN whether the server applied it. It was NOT retried. Look for new \"ZZ P4 ...\" records in the TEST database before re-running.");
+    } else {
+      report.inconclusive(`${error.method} ${error.path}`, `could not be completed (${error.code}) after ${error.attempts} attempts`);
+    }
+    console.log(`  Last requests: ${http.trace.slice(-4).map((t) => `${t.method} ${t.path} -> ${t.status ?? t.error}`).join(" | ")}`);
+  } else if (/^Mongo/.test(error?.name ?? "")) {
+    infrastructureFailure = true;
+    console.log(`\nINFRASTRUCTURE FAILURE (not an application result): the database connection or a read-only database check failed (${error.name}): ${sanitize(error.message, [PASSWORD, uri])}`);
+    console.log("  Check the Atlas Network Access list (this computer's IP), that the cluster is not paused, and that the TEST user and password are right.");
+    report.inconclusive("database connection / read-only database check", error.name);
+  } else {
+    report.check("script error (a defect in this script, not a network problem)", false, sanitize(error?.message, [PASSWORD, uri]));
   }
 } finally {
   await mongoose.disconnect().catch(() => {});
 }
-console.log(`\n${passed} passed, ${failed} failed.${cookie ? ` Records named "ZZ P4 ..." remain in the TEST database "${dbName}".` : " Nothing was written."}`);
-process.exit(failed ? 1 : 0);
+const { counts, lists } = report;
+console.log(`\n===== PHASE 4 REPORT =====\npassed ${counts.passed}   failed ${counts.failed}   skipped ${counts.skipped}   inconclusive ${counts.inconclusive}`);
+for (const [label, items] of Object.entries(lists)) if (items.length) console.log(`${label.toUpperCase()}:\n${items.map((i) => `  - ${i}`).join("\n")}`);
+console.log(http.hasCookie() ? `Records named "ZZ P4 ..." remain in the TEST database "${dbName}".` : "Nothing was written (no login happened).");
+if (infrastructureFailure || counts.skipped > 0) console.log("This run is NOT a complete pass: infrastructure problems or skipped checks mean some behaviour was not verified.");
+process.exit(report.exitCode());

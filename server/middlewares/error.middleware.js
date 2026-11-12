@@ -1,5 +1,6 @@
 import { env } from "../config/env.js";
 import ApiError from "../utils/ApiError.js";
+import { diag } from "../utils/diagnosticsHub.js";
 import { errorBody } from "../utils/apiResponse.js";
 
 // Turns known library errors into ApiErrors. Anything else is an unexpected 500.
@@ -23,6 +24,7 @@ export default function errorHandler(err, req, res, _next) {
 
   // Unexpected: log the detail on the server, never send it to the client in production.
   if (!env.isTest) console.error(`[error] ${req.method} ${req.originalUrl}`, err);
+  diag.error("request-error", err, `${req.method} ${String(req.originalUrl).split("?")[0]}`); // path only: no query string, headers or body
   const body = errorBody("Something went wrong on the server");
   if (!env.isProduction) body.debug = { name: err?.name, message: err?.message, stack: err?.stack };
   return res.status(500).json(body);

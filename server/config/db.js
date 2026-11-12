@@ -2,6 +2,7 @@
 // Conventions: docs/DATABASE_CONVENTIONS.md
 import mongoose from "mongoose";
 import { env } from "./env.js";
+import { diag } from "../utils/diagnosticsHub.js";
 
 // Reject queries with unknown filter fields instead of silently ignoring them.
 mongoose.set("strictQuery", true);
@@ -61,12 +62,18 @@ const attachListeners = () => {
   connection.on("connected", () => {
     everConnected = true;
     closingOnPurpose = false;
+    diag.event("db-connection", "connected");
   });
   connection.on("disconnected", () => {
+    if (everConnected) diag.event("db-connection", closingOnPurpose ? "disconnected (deliberate shutdown)" : "disconnected (lost)");
     if (everConnected && !closingOnPurpose) console.warn("[db] lost the connection to MongoDB (the driver will keep trying to reconnect)");
   });
-  connection.on("reconnected", () => console.log("[db] reconnected to MongoDB"));
+  connection.on("reconnected", () => {
+    diag.event("db-connection", "reconnected");
+    console.log("[db] reconnected to MongoDB");
+  });
   connection.on("error", (err) => {
+    diag.error("db-connection-error", err);
     if (everConnected) console.error("[db] connection error:", err.message);
   });
 };

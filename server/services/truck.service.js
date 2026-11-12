@@ -20,7 +20,7 @@ const fieldError = (status, message, field) => new ApiError(status, message, [{ 
 const isDuplicateKey = (err) => err?.code === 11000;
 
 export const toTruckDto = (row) => ({
-  id: String(row._id),
+  id: String(row.id ?? row._id),
   truckNumber: row.truckNumber,
   nickname: row.nickname ?? "",
   model: row.model ?? "",
@@ -35,7 +35,7 @@ export const toTruckDto = (row) => ({
 });
 
 export const toHistoryDto = (row) => ({
-  id: String(row._id),
+  id: String(row.id ?? row._id),
   truckId: String(row.truckId),
   kind: row.kind,
   from: row.from ?? null,
@@ -122,7 +122,7 @@ export const createTruck = async (input, actor, now = new Date()) => {
         { session }
       );
       await TruckStatusHistory.insertMany([historyRow(created._id, actor, now, { kind: HISTORY_KINDS.CREATED, from: null, to: TRUCK_STATUS.WORKING, note: "Truck added" })], { session });
-      return created.toObject();
+      return created.toObject({ transform: false });
     });
     return toTruckDto(row);
   } catch (err) {
@@ -197,7 +197,7 @@ export const changeStatus = async (id, input, actor, now = new Date()) => {
     );
     if (result.matchedCount !== 1) throw ApiError.conflict("The truck's status was changed by someone else. Reload and try again.");
     const [created] = await TruckStatusHistory.insertMany([historyRow(truck._id, actor, now, { kind: HISTORY_KINDS.STATUS, from: truck.status, to: input.status, reason, note })], { session });
-    return created.toObject();
+    return created.toObject({ transform: false });
   });
   return { truck: await getTruck(id), historyEntry: toHistoryDto(entry) };
 };

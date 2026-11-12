@@ -237,7 +237,7 @@ export const createTrips = async ({ truckId, businessDate, submissionId = null, 
         const existing = await TruckTrip.find({ truckId, businessDate }).session(session).lean();
         const max = existing.reduce((m, t) => Math.max(m, t.pheeraNo), 0);
         const created = await TruckTrip.insertMany(build(max), { session });
-        return { records: created.map((d) => d.toObject()), duplicate: false };
+        return { records: created.map((d) => d.toObject({ transform: false })), duplicate: false };
       });
       return { records: result.records.map((r) => toTripDto(r)), duplicate: result.duplicate };
     } catch (err) {

@@ -19,7 +19,7 @@ const historyRow = (action, actor, revision, reason = null) => ({ action, at: ne
 const isDuplicateKey = (err) => err?.code === 11000;
 
 export const toCustomerDto = (c) => ({
-  id: String(c._id), name: c.name, kind: c.kind ?? CUSTOMER_KIND.NORMAL, isInternal: c.kind === CUSTOMER_KIND.INTERNAL, address: c.address ?? "", gstin: c.gstin ?? "", stateName: c.stateName ?? "", stateCode: c.stateCode ?? "", contact: c.contact ?? "",
+  id: String(c.id ?? c._id), name: c.name, kind: c.kind ?? CUSTOMER_KIND.NORMAL, isInternal: c.kind === CUSTOMER_KIND.INTERNAL, address: c.address ?? "", gstin: c.gstin ?? "", stateName: c.stateName ?? "", stateCode: c.stateCode ?? "", contact: c.contact ?? "",
   isArchived: Boolean(c.isDeleted), archivedAt: c.isDeleted ? c.deletedAt : null, archivedBy: c.isDeleted ? c.deletedBy : null, archivedReason: c.isDeleted ? c.deletedReason : null,
   revision: c.revision ?? 1, createdAt: c.createdAt, updatedAt: c.updatedAt, history: c.history ?? [],
 });
@@ -64,7 +64,7 @@ export const createCustomer = async (body, actor) => {
     const [created] = await Customer.insertMany([
       { name, customerKey: textKey(name), kind: CUSTOMER_KIND.NORMAL, address: body.address ?? "", gstin: body.gstin ?? "", stateName: body.stateName ?? "", stateCode: body.stateCode ?? "", contact: body.contact ?? "", revision: 1, history: [historyRow(CUSTOMER_HISTORY.CREATE, actor, 1)], isDeleted: false, createdBy: actorOf(actor).id, createdByName: actorOf(actor).name, updatedBy: actorOf(actor).id, updatedByName: actorOf(actor).name },
     ]);
-    return toCustomerDto(created.toObject ? created.toObject() : created);
+    return toCustomerDto(created.toObject ? created.toObject({ transform: false }) : created);
   } catch (err) {
     if (isDuplicateKey(err)) return nameClash(name).then(() => { throw ApiError.conflict(`A customer named "${name}" already exists`, [{ field: "name", message: "Name already exists" }]); });
     throw err;
@@ -82,7 +82,7 @@ export const ensureInternalCustomer = async (actor) => {
     const [created] = await Customer.insertMany([
       { name: INTERNAL_CUSTOMER_NAME, customerKey: INTERNAL_KEY, kind: CUSTOMER_KIND.INTERNAL, revision: 1, history: [historyRow(CUSTOMER_HISTORY.CREATE, actor, 1, "Built-in internal customer")], isDeleted: false, createdBy: actorOf(actor).id, createdByName: actorOf(actor).name, updatedBy: actorOf(actor).id, updatedByName: actorOf(actor).name },
     ]);
-    return { customer: toCustomerDto(created.toObject ? created.toObject() : created), created: true };
+    return { customer: toCustomerDto(created.toObject ? created.toObject({ transform: false }) : created), created: true };
   } catch (err) {
     if (!isDuplicateKey(err)) throw err;
     const again = await find(); // a parallel request created it first
