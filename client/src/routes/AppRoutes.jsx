@@ -14,6 +14,7 @@ import Settings from "../pages/Settings";
 import Bills from "../pages/Bills";
 import BillDetail from "../pages/BillDetail";
 import BillEditor from "../pages/BillEditor";
+import BillFromPheeras from "../pages/BillFromPheeras";
 import Customers from "../pages/Customers";
 import Trucks from "../pages/Trucks";
 import TruckDetail from "../pages/TruckDetail";
@@ -75,6 +76,7 @@ export default function AppRoutes() {
             <Route path="customers" element={<Customers />} />
             <Route path="bills" element={<Bills />} />
             <Route path="bills/new" element={<BillEditor />} />
+            <Route path="bills/from-pheeras" element={<BillFromPheeras />} />
             <Route path="bills/:id" element={<BillDetail />} />
             <Route path="bills/:id/edit" element={<BillEditor />} />
             <Route path="reports" element={<Reports />} />

@@ -4,6 +4,8 @@ import { ArrowLeft, Ban, CheckCircle2, Download, Pencil, Printer } from "lucide-
 import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, LoadingState, useToast } from "../components/ui";
 import { useBills } from "../context/BillContext";
 import useBillDetail from "../features/bills/useBillDetail";
+import BillPheeraPanel from "../features/bills/BillPheeraPanel";
+import { useTruckTripStore } from "../context/TruckTripContext";
 import { BILL_STATUS, TAX_MODE_LABELS, TAX_TYPE_LABELS } from "../features/bills/billModel";
 import { billLabel, billTotals } from "../features/bills/billSelectors";
 import BillStatusBadge from "../features/bills/BillStatusBadge";
@@ -22,7 +24,8 @@ export default function BillDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const { finalizeBill, cancelBill, discardDraft } = useBills();
+  const { finalizeBill, cancelBill, discardDraft, reload: reloadBills } = useBills();
+  const { reload: reloadPheeras } = useTruckTripStore();
   const { bill, loading, error: loadError, reload, setBill } = useBillDetail(id);
   const [finalizing, setFinalizing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -164,6 +167,17 @@ export default function BillDetail() {
           </CardBody>
         </Card>
       </div>
+
+      {((bill.sourceTripIds?.length ?? 0) > 0 || draft) && (
+        <BillPheeraPanel
+          bill={bill}
+          onBillChange={setBill}
+          onPheerasChanged={() => {
+            reloadBills(); // the list shows the new totals
+            reloadPheeras(); // the Pheera screens show the new reservation status
+          }}
+        />
+      )}
 
       <Card>
         <CardHeader title="Invoice" subtitle="Same as the printed and PDF copy" />

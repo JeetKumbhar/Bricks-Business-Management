@@ -106,7 +106,7 @@ export const validateBillInput = ({ billDate, customer, items, taxMode, notes = 
     errors,
     customerErrors: cust.errors,
     itemErrors: rows.map((r) => r.errors),
-    value: valid ? { billDate, customer: cust.value, taxMode, items: rows.map((r) => r.value), notes: String(notes ?? "").trim() } : null,
+    value: valid ? { billDate, customer: cust.value, taxMode, items: rows.map((r, i) => (items[i]?.sourceTripId ? { ...r.value, sourceTripId: items[i].sourceTripId, pricingUnit: items[i].pricingUnit } : r.value)), notes: String(notes ?? "").trim() } : null,
   };
 };
 

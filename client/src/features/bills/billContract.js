@@ -27,6 +27,7 @@ export const toBillRequest = (value, revision) => ({
   },
   taxMode: value.taxMode,
   items: value.items.map((it) => ({
+    ...(it.sourceTripId ? { sourceTripId: it.sourceTripId } : {}), // a Pheera line of THIS draft (the server checks it)
     particulars: it.particulars,
     hsn: it.hsn,
     ...(it.quantity === null ? {} : { quantity: it.quantity }),

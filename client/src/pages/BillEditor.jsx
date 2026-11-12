@@ -212,7 +212,7 @@ function BillEditorForm({ initial, existing }) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-5">
         <div className="space-y-4 sm:space-y-5 lg:col-span-2">
           <SellerSummary settings={settings} />
-          <CustomerSection customer={form.customer} errors={customerErrors} savedCustomers={savedCustomers} onChange={setCustomer} gst={form.taxMode === TAX_MODE.GST} />
+          <CustomerSection lockedName={Boolean(saved?.customerId)} customer={form.customer} errors={customerErrors} savedCustomers={savedCustomers} onChange={setCustomer} gst={form.taxMode === TAX_MODE.GST} />
 
           <Card>
             <CardHeader title="Invoice Details" subtitle="Date, invoice type and notes" />

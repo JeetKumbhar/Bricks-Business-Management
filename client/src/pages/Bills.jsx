@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Plus, RotateCcw } from "lucide-react";
+import { FilePlus2, FileText, Plus, RotateCcw } from "lucide-react";
 import { Button, Card, CardBody, ConfirmDialog, DatePicker, EmptyState, LoadingState, Select, SearchInput, useToast } from "../components/ui";
 import BillSummaryCards from "../features/bills/BillSummaryCards";
 import BillsTable from "../features/bills/BillsTable";
@@ -87,9 +87,14 @@ export default function Bills() {
           <h1 className="type-page-heading">Bills</h1>
           <p className="mt-1 text-sm text-fg-muted">Create and manage customer invoices.</p>
         </div>
-        <Button leftIcon={Plus} onClick={() => navigate("/bills/new")} className="self-start" size="lg">
-          Create New Bill
-        </Button>
+        <div className="flex flex-wrap gap-2 self-start">
+          <Button variant="outline" leftIcon={FilePlus2} onClick={() => navigate("/bills/from-pheeras")} size="lg">
+            Bill from Pheeras
+          </Button>
+          <Button leftIcon={Plus} onClick={() => navigate("/bills/new")} size="lg">
+            Create New Bill
+          </Button>
+        </div>
       </div>
 
       {loadError && (

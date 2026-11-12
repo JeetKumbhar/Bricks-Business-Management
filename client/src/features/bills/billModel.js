@@ -48,13 +48,15 @@ const newKey = () => `row-${Date.now().toString(36)}-${(keyCounter += 1)}`;
 /** Item as typed in the editor (everything is text until it is validated). */
 export const emptyItemDraft = (defaults = {}) => ({ key: newKey(), particulars: "", hsn: "", quantity: "", unit: "", rate: "", taxRate: "", ...defaults });
 
-/** A saved item -> editor text fields */
+/** A saved item -> editor text fields. A line made from a Pheera keeps its link (sourceTripId), pricing unit and source details. */
 export const itemToDraft = (item) => ({
+  ...(item.sourceTripId ? { sourceTripId: item.sourceTripId, pricingUnit: item.pricingUnit ?? "PER_UNIT", source: item.source ?? null } : {}),
   key: newKey(),
   particulars: item.particulars,
   hsn: item.hsn ?? "",
   quantity: item.quantity === null || item.quantity === undefined ? "" : String(item.quantity),
   unit: item.unit,
-  rate: item.rate === null || item.rate === undefined ? "" : String(item.rate),
+  // a Pheera line starts with no rate (the server stores 0): shown blank until the owner enters it
+  rate: item.rate === null || item.rate === undefined || (item.sourceTripId && item.rate === 0) ? "" : String(item.rate),
   taxRate: item.taxRate === null || item.taxRate === undefined ? "" : String(item.taxRate),
 });

@@ -38,6 +38,8 @@ export const previewBillFromForm = (form, settings, status = BILL_STATUS.DRAFT) 
   taxMode: form.taxMode,
   seller: sellerSnapshot(settings),
   items: form.items.map((it) => ({
+    ...(it.sourceTripId ? { sourceTripId: it.sourceTripId } : {}),
+    pricingUnit: it.pricingUnit,
     particulars: it.particulars,
     hsn: it.hsn,
     quantity: lenient(it.quantity, 3),

@@ -16,12 +16,15 @@ const RATE_DECIMALS = 2;
 const PERCENT_DECIMALS = 2;
 
 /** Row amount in paise from quantity and rate (numbers or typed text). null if either cannot be read. */
-export const lineAmountPaise = (quantity, rate) => {
+export const PER_THOUSAND = "PER_THOUSAND";
+
+/** pricingUnit PER_THOUSAND (a bricks line made from a Pheera): the rate is Rs per 1,000, so paise = quantityMilli x ratePaise / 1,000,000. */
+export const lineAmountPaise = (quantity, rate, pricingUnit) => {
   const q = parseScaled(quantity, QTY_DECIMALS);
   const r = parseScaled(rate, RATE_DECIMALS);
   if (!q.ok || !r.ok) return null;
   // quantity has 10^3 scale and rate 10^2 scale: paise = quantityMilli x ratePaise / 1000
-  return roundDiv(BigInt(q.scaled) * BigInt(r.scaled), 1000);
+  return roundDiv(BigInt(q.scaled) * BigInt(r.scaled), pricingUnit === PER_THOUSAND ? 1_000_000 : 1000);
 };
 
 /** GST rate in hundredths of a percent (18 -> 1800). null if it cannot be read (blank counts as unreadable). */
@@ -52,7 +55,7 @@ export const computeInvoice = (items, taxMode, taxType) => {
   const taxPending = gst && !taxType;
   const apply = gst && !taxPending;
   const lines = items.map((item) => {
-    const amountPaise = lineAmountPaise(item.quantity, item.rate) ?? 0;
+    const amountPaise = lineAmountPaise(item.quantity, item.rate, item.pricingUnit) ?? 0;
     const taxRateBp = gst ? (rateBasisPoints(item.taxRate) ?? 0) : 0;
     const cgstPaise = apply && taxType === TAX_TYPE.INTRA ? roundDiv(BigInt(amountPaise) * BigInt(taxRateBp), 20000) : 0;
     const igstPaise = apply && taxType === TAX_TYPE.INTER ? roundDiv(BigInt(amountPaise) * BigInt(taxRateBp), 10000) : 0;

@@ -1,9 +1,9 @@
-
 // Bills and invoice settings: /api/bills and /api/invoice-settings (server/routes/bill.routes.js, invoiceSettings.routes.js).
 // A failed call always throws an ApiError: no sample data, no fallback. Reading is open to signed-in users; every write (and the
 // invoice settings, which hold bank details) is owner only on the server. The server calculates every figure and allocates the bill
-// number at finalize. Pheera-to-Bill endpoints (/from-trips, /:id/trips) are deliberately NOT used here (Batch 2).
+// number at finalize. Pheera-to-Bill endpoints (/from-trips, /:id/trips) are at the end of this file (Batch 2).
 import { api } from "./api";
+import { fromPheeraDto } from "./pheeraMapper";
 import { fromBillDto, fromSettingsDto, toCancelRequest, toFinalizeRequest, toSettingsRequest } from "../features/bills/billContract";
 
 const PAGE_SIZE = 100; // the largest page /api/bills allows
@@ -46,3 +46,34 @@ export const discardBill = async (id, reason) => (await api.post(`/bills/${id}/d
 
 export const getInvoiceSettings = async ({ signal } = {}) => fromSettingsDto((await api.get("/invoice-settings", { signal })).data);
 export const updateInvoiceSettings = async (settings) => fromSettingsDto((await api.patch("/invoice-settings", toSettingsRequest(settings))).data);
+
+// ---- Pheera <-> Bill (draft bills made from Pheeras) -----------------------------------------------------------------------------
+// The server decides everything: which Pheeras are eligible (UNBILLED, ONE active normal customer), the lines (one per Pheera, quantity and
+// unit from the Pheera), the totals and the reservation (UNBILLED -> RESERVED). Nothing here computes a status or a number.
+
+/** A bill answer that also carries its Pheeras: -> { bill, trips }. */
+const withTrips = (data) => ({ bill: fromBillDto(data), trips: (data.trips ?? []).map(fromPheeraDto) });
+
+/**
+ * POST /bills/from-trips. `requestId` makes the request safe to repeat: the same id and the same Pheeras return the draft already made
+ * (duplicate: true) instead of a second one. -> { bill, trips, duplicate }
+ */
+export async function generateBillFromPheeras({ tripIds, requestId }) {
+  const res = await api.post("/bills/from-trips", { tripIds, requestId });
+  return { ...withTrips(res.data), duplicate: Boolean(res.meta?.duplicate) };
+}
+
+/** The Pheeras of a bill, in invoice order, with their current billing status. */
+export const getBillTrips = async (id, { signal } = {}) => (await api.get(`/bills/${id}/trips`, { signal })).data.map(fromPheeraDto);
+
+/** Add Pheeras of the draft's own customer to a draft (the revision is checked: a stale one is refused with 409). -> { bill, trips } */
+export async function addPheerasToBill(id, tripIds, revision) {
+  const res = await api.post(`/bills/${id}/trips`, { tripIds, ...(revision === undefined ? {} : { revision }) });
+  return withTrips(res.data);
+}
+
+/** Remove ONE Pheera line from a draft; the server releases the Pheera (RESERVED -> UNBILLED). -> { bill, trips } */
+export async function removePheeraFromBill(id, tripId) {
+  const res = await api.delete(`/bills/${id}/trips/${tripId}`);
+  return withTrips(res.data);
+}
