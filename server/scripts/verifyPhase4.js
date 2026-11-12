@@ -3,8 +3,9 @@
 //
 //   1. In server/.env set MONGODB_URI to a DEDICATED TEST database (the database NAME must END with "_test", e.g. brickpro_test).
 //   2. Start the backend from the same folder:   npm run dev      (it must use that same .env)
-//   3. PHASE4_CONFIRM_DB=brickpro_test OWNER_EMAIL=... OWNER_PASSWORD='...' \
-//        node scripts/verifyPhase4.js --i-understand-this-writes-test-data [--set-test-settings]
+//   3. In Windows PowerShell:
+//        $env:PHASE4_CONFIRM_DB = "brickpro_test"; $env:OWNER_EMAIL = "..."; $env:OWNER_PASSWORD = "..."
+//        node scripts\verifyPhase4.js --i-understand-this-writes-test-data [--set-test-settings]
 //
 // SAFETY (all of this happens BEFORE any write through the backend, and before logging in, because a login also writes):
 //   - NODE_ENV=production is refused.

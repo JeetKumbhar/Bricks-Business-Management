@@ -7,6 +7,13 @@
 // end up in shell history or a process list, and it is never printed or logged. For automation only, it may instead be
 // supplied in the OWNER_PASSWORD environment variable.
 // A reset also signs the account out everywhere.
+//
+// SAFETY: this script works ONLY on a TEST database. It refuses (before asking for a password or connecting) unless
+//   - NODE_ENV is not production,
+//   - the database name in MONGODB_URI ends with "_test" (case-insensitive), and
+//   - --confirm-db <that exact name> is given.
+// There is deliberately no bypass: creating the real owner is a separate, production procedure, not this script.
+//   npm run create-owner -- --email testowner@aayush.local --name "Test Owner" --confirm-db brickpro_test
 import { connectDB, describeTarget, disconnectDB } from "../config/db.js";
 import { env } from "../config/env.js";
 import { ROLES } from "../constants/roles.js";
@@ -60,7 +67,21 @@ const getPassword = async () => {
   return first;
 };
 
+/** Refuses (returns an error message) unless the effective MONGODB_URI is a confirmed TEST database. Never prints the URI. */
+const testDatabaseProblem = () => {
+  if ((process.env.NODE_ENV ?? "").toLowerCase() === "production" || env.isProduction) return "Refusing: NODE_ENV is production. This script only works on a TEST database.";
+  const dbName = env.mongodbUri.match(/^mongodb(?:\+srv)?:\/\/[^/]+\/([^/?#]*)/i)?.[1] ?? "";
+  if (!dbName) return "Refusing: MONGODB_URI has no database name. Use a TEST database whose name ends with _test (for example brickpro_test).";
+  if (!/_test$/i.test(dbName)) return `Refusing: the database name "${dbName}" does not end with "_test". This script only works on a TEST database.`;
+  if (option("confirm-db") !== dbName) return `Refusing: add --confirm-db ${dbName} to confirm that "${dbName}" is the TEST database you mean.`;
+  console.log(`Target database: ${dbName} (confirmed TEST)`);
+  return null;
+};
+
 const main = async () => {
+  const unsafe = testDatabaseProblem(); // before the password prompt, the connection, and for BOTH create and --reset-password
+  if (unsafe) return die(unsafe);
+
   const email = (option("email") ?? "").trim().toLowerCase();
   const name = (option("name") ?? "").trim();
   const reset = flag("reset-password");
