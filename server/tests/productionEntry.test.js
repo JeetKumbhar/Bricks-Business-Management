@@ -19,6 +19,7 @@ vi.mock("../models/User.js", () => ({
   default: { findById: (id) => ({ lean: async () => users.list.find((u) => String(u._id) === String(id)) ?? null }) },
 }));
 vi.mock("../models/Counter.js", () => ({ default: makeCounterModel() }));
+vi.mock("../utils/transaction.js", () => ({ runInTransaction: (work) => db.transaction(() => work(null)) }));
 vi.mock("../models/Labour.js", async (importOriginal) => ({ default: makeLabourModel((await importOriginal()).default) }));
 vi.mock("../models/LabourRateHistory.js", async (importOriginal) => ({ default: makeRateModel((await importOriginal()).default) }));
 vi.mock("../models/Attendance.js", () => ({ default: makeAttendanceModel() }));
@@ -342,6 +343,7 @@ describe("the duplicate rule: one live entry per team per date", () => {
     db.beforeProductionUpdate = () => {
       db.beforeProductionUpdate = null;
       db.production.set("other", { _id: "other", teamId: t.id, seasonId: "x", date: today, numberOfMaaps: 7, payableBricks: 1750, ratePaise: 65000, earningsPaise: 113750, revision: 1, isDeleted: false, history: [] });
+      db.resnapshot(); // the rival\'s save is committed: our rollback must not undo it
     };
     const res = await save(today, [row(t, 4)]);
     expect(res.status).toBe(409);
@@ -367,6 +369,7 @@ describe("the duplicate rule: one live entry per team per date", () => {
       const found = [...db.production.values()].find((r) => String(r._id) === String(filter._id));
       found.revision += 1;
       found.numberOfMaaps = 9;
+      db.resnapshot(); // the rival's change is committed: our rollback must not undo it
     };
     expect((await save(today, [row(t, 6)])).status).toBe(409);
     expect(liveRows(today)[0].numberOfMaaps).toBe(9);
@@ -744,5 +747,64 @@ describe("models", () => {
     expect(new RealSeason({ ...ok, status: "DONE" }).validateSync().errors.status).toBeDefined();
     expect(new RealSeason({ ...ok, endDate: "2026-02-30" }).validateSync().errors.endDate).toBeDefined();
     expect(new RealSeason({}).validateSync().errors).toHaveProperty("name");
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("Batch 1B: a day is saved ALL-OR-NOTHING", () => {
+  it("a database failure on the third team leaves nothing saved and reports an error", async () => {
+    await makeSeason();
+    const [a, b, c] = [await team(), await team(), await team()];
+    let writes = 0;
+    db.beforeProductionUpdate = () => {
+      writes += 1;
+      if (writes === 3) throw new Error("simulated database failure");
+    };
+    const res = await save(today, [row(a, 4), row(b, 5), row(c, 6)]);
+    expect(res.status).toBe(500);
+    expect(db.production.size).toBe(0);
+  });
+
+  it("a conflict on one row rolls back the other rows of the same batch", async () => {
+    await makeSeason();
+    const [a, b] = [await team(), await team()];
+    await save(today, [row(b, 4)]);
+    db.beforeProductionUpdate = (filter) => {
+      if (filter.revision === undefined) return;
+      db.beforeProductionUpdate = null;
+      const mine = [...db.production.values()].find((r) => r.teamId === b.id);
+      mine.numberOfMaaps = 9;
+      mine.revision += 1;
+      db.resnapshot();
+    };
+    const res = await save(today, [row(b, 6), row(a, 4)]);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/Nothing was saved/);
+    expect(liveRows(today).map((r) => r.teamId)).toEqual([b.id]);
+  });
+
+  it("one invalid row means no row is written", async () => {
+    await makeSeason();
+    const [a, b] = [await team(), await team()];
+    const res = await save(today, [row(a, 4), { teamId: b.id, maaps: -1 }]);
+    expect(res.status).toBe(400);
+    expect(db.production.size).toBe(0);
+  });
+
+  it("sending the same day again creates no duplicate and changes nothing", async () => {
+    await makeSeason();
+    const [a, b] = [await team(), await team()];
+    expect((await save(today, [row(a, 5), row(b, 7)])).body.data.saved).toEqual({ created: 2, updated: 0, unchanged: 0 });
+    const again = await save(today, [row(a, 5), row(b, 7)]);
+    expect(again.status).toBe(200);
+    expect(again.body.data.saved).toEqual({ created: 0, updated: 0, unchanged: 2 });
+    expect(liveRows(today)).toHaveLength(2);
+  });
+
+  it("the production calculation is untouched: 5 maaps give 1,250 payable bricks (250 per maap, nothing carried forward)", async () => {
+    await makeSeason();
+    const a = await team();
+    await save(today, [row(a, 5)]);
+    expect(liveRows(today)[0].payableBricks).toBe(1250);
   });
 });

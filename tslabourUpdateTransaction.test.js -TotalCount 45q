@@ -1,0 +1,283 @@
+warning: in the working copy of 'server/tests/labourUpdateTransaction.test.js', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/tests/labourUpdateTransaction.test.js b/tests/labourUpdateTransaction.test.js[m
+[1mnew file mode 100644[m
+[1mindex 0000000..284bc68[m
+[1m--- /dev/null[m
+[1m+++ b/tests/labourUpdateTransaction.test.js[m
+[36m@@ -0,0 +1,276 @@[m
+[32m+[m[32mimport mongoose from "mongoose";[m
+[32m+[m[32mimport request from "supertest";[m
+[32m+[m[32mimport { beforeEach, describe, expect, it, vi } from "vitest";[m
+[32m+[m
+[32m+[m[32mvi.hoisted(() => {[m
+[32m+[m[32m  process.env.NODE_ENV = "test";[m
+[32m+[m[32m  process.env.BCRYPT_ROUNDS = "4";[m
+[32m+[m[32m  process.env.CLIENT_ORIGIN = "http://localhost:5173";[m
+[32m+[m[32m  process.env.JWT_SECRET = "unit-test-secret-that-is-long-enough-0123456789";[m
+[32m+[m[32m  process.env.MONGODB_URI = "";[m
+[32m+[m[32m});[m
+[32m+[m
+[32m+[m[32m// Batch 1B closing fix: a labour UPDATE that moves the joining date changes two documents (the worker and its first rate-history[m
+[32m+[m[32m// row). Here the REAL utils/transaction.js runs (not mocked); only mongoose.startSession is replaced by a fake session whose[m
+[32m+[m[32m// withTransaction rolls back the in-memory store on failure. Nothing connects to a database.[m
+[32m+[m[32mconst { db, makeCounterModel, makeLabourModel, makeRateModel } = await import("./helpers/memoryDb.js");[m
+[32m+[m[32mconst users = vi.hoisted(() => ({ list: [] }));[m
+[32m+[m[32mconst connectBlocked = vi.hoisted(() => vi.fn(() => { throw new Error("TEST SAFETY: a database connection was attempted in a mocked test"); }));[m
+[32m+[m
+[32m+[m[32mvi.mock("../config/db.js", () => ({ getDbStatus: async () => ({ status: "connected", name: "test" }), connectDB: connectBlocked }));[m
+[32m+[m[32mvi.mock("../models/User.js", () => ({ default: { findById: (id) => ({ lean: async () => users.list.find((u) => String(u._id) === String(id)) ?? null }) } }));[m
+[32m+[m[32mvi.mock("../models/Counter.js", () => ({ default: makeCounterModel() }));[m
+[32m+[m[32mvi.mock("../models/Labour.js", async (importOriginal) => ({ default: makeLabourModel((await importOriginal()).default) }));[m
+[32m+[m[32mvi.mock("../models/LabourRateHistory.js", async (importOriginal) => ({ default: makeRateModel((await importOriginal()).default) }));[m
+[32m+[m
+[32m+[m[32mconst connectSpy = vi.spyOn(mongoose, "connect").mockImplementation(connectBlocked);[m
+[32m+[m[32mconst { createApp } = await import("../app.js");[m
+[32m+[m[32mconst { signAccessToken } = await import("../services/auth.service.js");[m
+[32m+[m[32mconst { addDays, todayBusinessDate } = await import("../utils/dates.js");[m
+[32m+[m[32mconst FakeLabour = (await import("../models/Labour.js")).default;[m
+[32m+[m[32mconst FakeRate = (await import("../models/LabourRateHistory.js")).default;[m
+[32m+[m
+[32m+[m[32mconst ORIGIN = "http://localhost:5173";[m
+[32m+[m[32mconst today = todayBusinessDate();[m
+[32m+[m[32mconst daysAgo = (n) => addDays(today, -n);[m
+[32m+[m[32mconst clone = (v) => JSON.parse(JSON.stringify(v));[m
+[32m+[m
+[32m+[m[32mconst env = { mode: "ok", startSession: null, sessions: [], attempts: 0 };[m
+[32m+[m[32mconst baseFindById = FakeLabour.findById;[m
+[32m+[m[32mconst baseRateUpdate = FakeRate.updateOne;[m
+[32m+[m[32mconst calls = { save: [], rateUpdate: [] };[m
+[32m+[m
+[32m+[m[32m// A fake MongoDB session: withTransaction runs the work against a snapshot and puts everything back if it throws.[m
+[32m+[m[32m// mode "unsupported": the database refuses (code 20) before the work runs. mode "transient-once": the first attempt does the[m
+[32m+[m[32m// work, then fails with a transient label, so the work must be re-run (like the real driver).[m
+[32m+[m[32mconst fakeSession = () => {[m
+[32m+[m[32m  const session = { id: `s${env.sessions.length + 1}`, endSession: vi.fn(async () => {}) };[m
+[32m+[m[32m  session.withTransaction = async (fn) => {[m
+[32m+[m[32m    if (env.mode === "unsupported") throw Object.assign(new Error("Transaction numbers are only allowed on a replica set member or mongos"), { code: 20 });[m
+[32m+[m[32m    for (let attempt = 1; attempt <= 3; attempt += 1) {[m
+[32m+[m[32m      env.attempts += 1;[m
+[32m+[m[32m      try {[m
+[32m+[m[32m        return await db.transaction(async () => {[m
+[32m+[m[32m          const out = await fn(session);[m
+[32m+[m[32m          if (env.mode === "transient-once" && attempt === 1) throw Object.assign(new Error("transient"), { errorLabels: ["TransientTransactionError"] });[m
+[32m+[m[32m          return out;[m
+[32m+[m[32m        });[m
+[32m+[m[32m      } catch (err) {[m
+[32m+[m[32m        if (!(err?.errorLabels ?? []).includes("TransientTransactionError")) throw err;[m
+[32m+[m[32m      }[m
+[32m+[m[32m    }[m
+[32m+[m[32m    throw new Error("too many transient retries");[m
+[32m+[m[32m  };[m
+[32m+[m[32m  env.sessions.push(session);[m
+[32m+[m[32m  return session;[m
+[32m+[m[32m};[m
+[32m+[m
+[32m+[m[32mlet app;[m
+[32m+[m[32mlet owner;[m
+[32m+[m[32mlet manager;[m
+[32m+[m[32mconst addUser = (role, name) => {[m
+[32m+[m[32m  const user = { _id: new mongoose.Types.ObjectId().toString(), name, email: `${role.toLowerCase()}@example.com`, role, isActive: true, tokenVersion: 0 };[m
+[32m+[m[32m  users.list.push(user);[m
+[32m+[m[32m  return { user, cookie: `brickpro_token=${signAccessToken(user)}` };[m
+[32m+[m[32m};[m
+[32m+[m[32mconst send = (method, url, cookie, body) => {[m
+[32m+[m[32m  const req = request(app)[method](url).set("Origin", ORIGIN).set("Cookie", cookie);[m
+[32m+[m[32m  return body === undefined ? req : req.send(body);[m
+[32m+[m[32m};[m
+[32m+[m[32mconst asOwner = (method, url, body) => send(method, url, owner.cookie, body);[m
+[32m+[m[32mconst bigari = (o = {}) => ({ labourType: "BIGARI", name: "Ramesh Kumar", mobile: "9876543210", village: "Sinnar", joiningDate: daysAgo(60), dailyRate: 650, ...o });[m
+[32m+[m[32mconst create = async (body) => {[m
+[32m+[m[32m  const res = await asOwner("post", "/api/labours", body);[m
+[32m+[m[32m  expect(res.status, JSON.stringify(res.body)).toBe(201);[m
+[32m+[m[32m  return res.body.data;[m
+[32m+[m[32m};[m
+[32m+[m[32mconst stores = () => clone({ labours: [...db.labours], rates: db.rates });[m
+[32m+[m[32mconst sessionStarts = () => env.sessions.length;[m
+[32m+[m
+[32m+[m[32mbeforeEach(() => {[m
+[32m+[m[32m  db.reset();[m
+[32m+[m[32m  users.list.length = 0;[m
+[32m+[m[32m  Object.assign(env, { mode: "ok", sessions: [], attempts: 0 });[m
+[32m+[m[32m  calls.save.length = 0;[m
+[32m+[m[32m  calls.rateUpdate.length = 0;[m
+[32m+[m[32m  vi.spyOn(mongoose, "startSession").mockImplementation(async () => fakeSession());[m
+[32m+[m[32m  // record the options each write receives, so the session itself can be asserted[m
+[32m+[m[32m  FakeLabour.findById = async (id) => {[m
+[32m+[m[32m    const doc = await baseFindById.call(FakeLabour, id);[m
+[32m+[m[32m    if (doc) {[m
+[32m+[m[32m      const save = doc.save;[m
+[32m+[m[32m      doc.save = async (...args) => {[m
+[32m+[m[32m        calls.save.push(args[0]);[m
+[32m+[m[32m        if (env.failSave) throw env.failSave;[m
+[32m+[m[32m        return save.apply(doc, args);[m
+[32m+[m[32m      };[m
+[32m+[m[32m    }[m
+[32m+[m[32m    return doc;[m
+[32m+[m[32m  };[m
+[32m+[m[32m  FakeRate.updateOne = async (filter, update, options) => {[m
+[32m+[m[32m    calls.rateUpdate.push(options);[m
+[32m+[m[32m    if (env.failRateUpdate) throw env.failRateUpdate;[m
+[32m+[m[32m    return baseRateUpdate(filter, update, options);[m
+[32m+[m[32m  };[m
+[32m+[m[32m  env.failSave = null;[m
+[32m+[m[32m  env.failRateUpdate = null;[m
+[32m+[m[32m  owner = addUser("OWNER", "Ramesh Patel");[m
+[32m+[m[32m  manager = addUser("MANAGER", "Helper");[m
+[32m+[m[32m  app = createApp();[m
+[32m+[m[32m});[m
+[32m+[m
+[32m+[m[32mdescribe("moving the joining date saves the worker and the first rate TOGETHER", () => {[m
+[32m+[m[32m  it("success commits both writes, in one transaction, through the same session", async () => {[m
+[32m+[m[32m    const l = await create(bigari());[m
+[32m+[m[32m    env.sessions.length = 0;[m
+[32m+[m[32m    calls.save.length = 0;[m
+[32m+[m[32m    const res = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(70) });[m
+[32m+[m[32m    expect(res.status).toBe(200);[m
+[32m+[m[32m    expect(res.body.data.joiningDate).toBe(daysAgo(70));[m
+[32m+[m[32m    expect(db.labours.get(l.id).joiningDate).toBe(daysAgo(70));[m
+[32m+[m[32m    expect(db.rates).toHaveLength(1);[m
+[32m+[m[32m    expect(db.rates[0].effectiveFrom).toBe(daysAgo(70));[m
+[32m+[m[32m    expect(sessionStarts()).toBe(1);[m
+[32m+[m[32m    expect(calls.save).toHaveLength(1);[m
+[32m+[m[32m    expect(calls.rateUpdate).toHaveLength(1);[m
+[32m+[m[32m    expect(calls.save[0].session).toBe(env.sessions[0]);[m
+[32m+[m[32m    expect(calls.rateUpdate[0].session).toBe(env.sessions[0]);[m
+[32m+[m[32m    expect(env.sessions[0].endSession).toHaveBeenCalled();[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("a failure while updating the rate row rolls the worker back too (HTTP 500, nothing partial)", async () => {[m
+[32m+[m[32m    const l = await create(bigari());[m
+[32m+[m[32m    const before = stores();[m
+[32m+[m[32m    env.failRateUpdate = new Error("simulated database failure");[m
+[32m+[m[32m    const res = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(70), name: "Changed Name", status: "INACTIVE", statusReason: "left" });[m
+[32m+[m[32m    expect(res.status).toBe(500);[m
+[32m+[m[32m    expect(stores()).toEqual(before); // joining date, name, status, statusHistory and the rate row: all unchanged[m
+[32m+[m[32m    expect(db.labours.get(l.id).statusHistory).toHaveLength(1);[m
+[32m+[m[32m    env.failRateUpdate = null;[m
+[32m+[m[32m    const retry = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(70) }); // the same request works afterwards[m
+[32m+[m[32m    expect(retry.status).toBe(200);[m
+[32m+[m[32m    expect(db.rates[0].effectiveFrom).toBe(daysAgo(70));[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("a failure while saving the worker leaves the rate row untouched; a duplicate mobile is still a 409 on mobile", async () => {[m
+[32m+[m[32m    const l = await create(bigari());[m
+[32m+[m[32m    const before = stores();[m
+[32m+[m[32m    env.failSave = Object.assign(new Error("E11000 duplicate key"), { code: 11000 });[m
+[32m+[m[32m    const dup = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(70), mobile: "9876543299" });[m
+[32m+[m[32m    expect(dup.status).toBe(409);[m
+[32m+[m[32m    expect(dup.body.errors[0].field).toBe("mobile");[m
+[32m+[m[32m    expect(stores()).toEqual(before);[m
+[32m+[m[32m    expect(calls.rateUpdate).toHaveLength(0);[m
+[32m+[m[32m    env.failSave = new Error("simulated save failure");[m
+[32m+[m[32m    const other = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(70) });[m
+[32m+[m[32m    expect(other.status).toBe(500);[m
+[32m+[m[32m    expect(stores()).toEqual(before);[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("a failed commit AFTER both writes (transaction failure) leaves no partial data", async () => {[m
+[32m+[m[32m    const l = await create(bigari());[m
+[32m+[m[32m    const before = stores();[m
+[32m+[m[32m    env.mode = "commit-fails";[m
+[32m+[m[32m    const original = mongoose.startSession;[m
+[32m+[m[32m    vi.spyOn(mongoose, "startSession").mockImplementation(async () => {[m
+[32m+[m[32m      const s = fakeSession();[m
+[32m+[m[32m      s.withTransaction = async (fn) =>[m
+[32m+[m[32m        db.transaction(async () => {[m
+[32m+[m[32m          await fn(s);[m
+[32m+[m[32m          throw new Error("commit failed");[m
+[32m+[m[32m        });[m
+[32m+[m[32m      return s;[m
+[32m+[m[32m    });[m
+[32m+[m[32m    const res = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(70) });[m
+[32m+[m[32m    expect(res.status).toBe(500);[m
+[32m+[m[32m    expect(stores()).toEqual(before);[m
+[32m+[m[32m    expect(original).toBeDefined();[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("a transient error re-runs the work and the final state is the same as a single run", async () => {[m
+[32m+[m[32m    const l = await create(bigari());[m
+[32m+[m[32m    env.mode = "transient-once";[m
+[32m+[m[32m    env.attempts = 0;[m
+[32m+[m[32m    const res = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(70), village: "Nashik" });[m
+[32m+[m[32m    expect(res.status).toBe(200);[m
+[32m+[m[32m    expect(env.attempts).toBe(2);[m
+[32m+[m[32m    expect(db.labours.get(l.id)).toMatchObject({ joiningDate: daysAgo(70), village: "Nashik" });[m
+[32m+[m[32m    expect(db.rates).toHaveLength(1);[m
+[32m+[m[32m    expect(db.rates[0].effectiveFrom).toBe(daysAgo(70));[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("on a database without transactions: HTTP 503, 'Nothing ran', no partial write", async () => {[m
+[32m+[m[32m    const l = await create(bigari());[m
+[32m+[m[32m    const before = stores();[m
+[32m+[m[32m    env.mode = "unsupported";[m
+[32m+[m[32m    calls.save.length = 0;[m
+[32m+[m[32m    const res = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(70) });[m
+[32m+[m[32m    expect(res.status).toBe(503);[m
+[32m+[m[32m    expect(res.body.message).toMatch(/does not support transactions.*Nothing was saved/s);[m
+[32m+[m[32m    expect(stores()).toEqual(before);[m
+[32m+[m[32m    expect(calls.save).toHaveLength(0);[m
+[32m+[m[32m    expect(calls.rateUpdate).toHaveLength(0);[m
+[32m+[m[32m  });[m
+[32m+[m[32m});[m
+[32m+[m
+[32m+[m[32mdescribe("existing behaviour is unchanged", () => {[m
+[32m+[m[32m  it("an update that does not move the joining date needs no transaction (one document), even on a database without them", async () => {[m
+[32m+[m[32m    const l = await create(bigari());[m
+[32m+[m[32m    env.sessions.length = 0;[m
+[32m+[m[32m    env.mode = "unsupported";[m
+[32m+[m[32m    const res = await asOwner("patch", `/api/labours/${l.id}`, { name: "New Name", village: "Nashik", status: "INACTIVE", statusReason: "left" });[m
+[32m+[m[32m    expect(res.status).toBe(200);[m
+[32m+[m[32m    expect(sessionStarts()).toBe(0);[m
+[32m+[m[32m    expect(res.body.data).toMatchObject({ name: "New Name", village: "Nashik", status: "INACTIVE" });[m
+[32m+[m[32m    expect(res.body.data.statusHistory).toHaveLength(2);[m
+[32m+[m[32m    expect(db.rates[0].effectiveFrom).toBe(daysAgo(60)); // first rate untouched[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("the same joining date again changes no rate row and needs no transaction", async () => {[m
+[32m+[m[32m    const l = await create(bigari());[m
+[32m+[m[32m    env.sessions.length = 0;[m
+[32m+[m[32m    const res = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(60), village: "Nashik" });[m
+[32m+[m[32m    expect(res.status).toBe(200);[m
+[32m+[m[32m    expect(sessionStarts()).toBe(0);[m
+[32m+[m[32m    expect(db.rates[0].effectiveFrom).toBe(daysAgo(60));[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("validation still runs BEFORE any transaction: a joining date past a later rate change is a 409 with nothing written", async () => {[m
+[32m+[m[32m    const l = await create(bigari());[m
+[32m+[m[32m    await asOwner("post", `/api/labours/${l.id}/rates`, { newRate: 700, effectiveFrom: daysAgo(10), reason: "Raise" });[m
+[32m+[m[32m    const before = stores();[m
+[32m+[m[32m    env.sessions.length = 0;[m
+[32m+[m[32m    const res = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(5) });[m
+[32m+[m[32m    expect(res.status).toBe(409);[m
+[32m+[m[32m    expect(res.body.errors[0].field).toBe("joiningDate");[m
+[32m+[m[32m    expect(sessionStarts()).toBe(0);[m
+[32m+[m[32m    expect(stores()).toEqual(before);[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("a duplicate mobile found by the pre-check, an unknown id, a bad body and a non-owner never start a transaction", async () => {[m
+[32m+[m[32m    const a = await create(bigari());[m
+[32m+[m[32m    const b = await create(bigari({ mobile: "9000000002" }));[m
+[32m+[m[32m    env.sessions.length = 0;[m
+[32m+[m[32m    const dup = await asOwner("patch", `/api/labours/${b.id}`, { joiningDate: daysAgo(70), mobile: a.mobile });[m
+[32m+[m[32m    expect(dup.status).toBe(409);[m
+[32m+[m[32m    expect((await asOwner("patch", "/api/labours/L-999", { joiningDate: daysAgo(70) })).status).toBe(404);[m
+[32m+[m[32m    expect((await asOwner("patch", `/api/labours/${b.id}`, { joiningDate: "2026-02-30" })).status).toBe(400);[m
+[32m+[m[32m    expect((await asOwner("patch", `/api/labours/${b.id}`, { joiningDate: daysAgo(70), dailyRate: 1 })).status).toBe(400);[m
+[32m+[m[32m    expect((await send("patch", `/api/labours/${b.id}`, manager.cookie, { joiningDate: daysAgo(70) })).status).toBe(403);[m
+[32m+[m[32m    expect(sessionStarts()).toBe(0);[m
+[32m+[m[32m    expect(db.labours.get(b.id).joiningDate).toBe(daysAgo(60));[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("the response shape equals a plain read of the same worker", async () => {[m
+[32m+[m[32m    const l = await create(bigari());[m
+[32m+[m[32m    const res = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(70) });[m
+[32m+[m[32m    const get = await asOwner("get", `/api/labours/${l.id}`);[m
+[32m+[m[32m    expect(res.body.data).toEqual(get.body.data);[m
+[32m+[m[32m    expect(Object.keys(res.body).sort()).toEqual(["data", "message", "success"].sort());[m
+[32m+[m[32m  });[m
+[32m+[m
+[32m+[m[32m  it("never connected to a database", () => {[m
+[32m+[m[32m    expect(connectSpy).not.toHaveBeenCalled();[m
+[32m+[m[32m    expect(connectBlocked).not.toHaveBeenCalled();[m
+[32m+[m[32m  });[m
+[32m+[m[32m});[m

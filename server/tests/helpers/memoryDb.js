@@ -165,6 +165,7 @@ export const makeLabourModel = (Real) => {
       return doc;
     },
     async create(data) {
+      if (Array.isArray(data)) return Promise.all(data.map((d) => this.create(d)));
       const doc = new Real(data);
       persist(doc, true);
       return doc;
@@ -180,6 +181,11 @@ export const makeRateModel = (Real) => ({
     return new Query(db.rates.filter((r) => matches(r, filter)).map(clone));
   },
   async create(data) {
+    if (Array.isArray(data)) {
+      const out = [];
+      for (const d of data) out.push(await this.create(d)); // one after another, like the real transaction
+      return out;
+    }
     if (db.failNextRateCreate) {
       db.failNextRateCreate = false;
       throw new Error("simulated database failure");
@@ -394,8 +400,8 @@ export const makePaymentModel = (Real) => {
  * were (all-or-nothing), the way a real aborted transaction does.
  */
 db.transaction = async (work) => {
-  const stores = [db.trucks, db.truckHistory, db.trips, db.bills, db.invoiceSettings, db.customers];
-  const take = () => [...stores.map((store) => [...store.entries()].map(([k, v]) => [k, structuredClone(v)])), structuredClone(db.counters)];
+  const stores = [db.trucks, db.truckHistory, db.trips, db.bills, db.invoiceSettings, db.customers, db.labours, db.attendance, db.maap, db.seasons, db.production, db.payments];
+  const take = () => [...stores.map((store) => [...store.entries()].map(([k, v]) => [k, structuredClone(v)])), structuredClone(db.counters), db.rates.map((r) => ({ ...r }))]; // rate rows keep real ObjectIds, which structuredClone would break
   let snapshot = take();
   db.resnapshot = () => { snapshot = take(); }; // a rival writer's committed change is not undone by OUR rollback
   try {
@@ -406,6 +412,8 @@ db.transaction = async (work) => {
       for (const [k, v] of snapshot[i]) store.set(k, v);
     });
     db.counters = snapshot[stores.length];
+    db.rates.length = 0;
+    db.rates.push(...snapshot[stores.length + 1]);
     throw err;
   }
 };

@@ -4,6 +4,7 @@ import Labour from "../models/Labour.js";
 import LabourRateHistory from "../models/LabourRateHistory.js";
 import ProductionEntry from "../models/ProductionEntry.js";
 import ApiError from "../utils/ApiError.js";
+import { runInTransaction } from "../utils/transaction.js";
 import { isFutureBusinessDate, todayBusinessDate } from "../utils/dates.js";
 import { paiseToRupees } from "../utils/money.js";
 import { ratePaiseAt, sortRatesAsc } from "./labourRates.js";
@@ -181,11 +182,21 @@ export const saveDay = async (date, { rows, reason }, actor, now = new Date()) =
   const counts = { created: 0, updated: 0, unchanged: rows.length - changes.length };
   const conflicts = [];
 
-  await Promise.all(
-    rows.map(async (row, i) => {
+  const conflictsError = () =>
+    ApiError.conflict(`${conflicts.length} row${conflicts.length === 1 ? " was" : "s were"} changed by someone else. Nothing was saved; reload and save again.`, conflicts);
+
+  // ALL-OR-NOTHING: the rows are written one after another inside ONE transaction. Any failure or conflict aborts it, so no partial day
+  // remains. The rows were fully validated above, before this point. Re-sending the same day after a lost response is safe: rows that
+  // already match are "unchanged", so nothing is duplicated.
+  await runInTransaction(
+    async (session) => {
+    counts.created = 0; // the callback can be re-run after a transient database error: start from zero each time
+    counts.updated = 0;
+    conflicts.length = 0;
+    for (const [i, row] of rows.entries()) {
       const before = existing.get(row.teamId);
       const conflict = () => conflicts.push({ field: `rows.${i}.teamId`, message: "Changed by someone else while saving. Reload and try again." });
-      if (before && before.numberOfMaaps === row.maaps && (before.note ?? "") === noteOf(row)) return;
+      if (before && before.numberOfMaaps === row.maaps && (before.note ?? "") === noteOf(row)) continue;
 
       if (!before) {
         const ratePaise = ratePaiseAt(rates.get(row.teamId), date);
@@ -214,15 +225,16 @@ export const saveDay = async (date, { rows, reason }, actor, now = new Date()) =
                 updatedBy: actorId,
               },
             },
-            { upsert: true }
+            { upsert: true, session }
           );
           if (result.upsertedCount === 1) counts.created += 1;
           else conflict();
         } catch (err) {
           if (!isDuplicateKey(err)) throw err;
           conflict();
+          throw conflictsError(); // a duplicate-key error already aborts the transaction: stop here
         }
-        return;
+        continue;
       }
 
       const { payableBricks, earningsPaise } = calculateProduction(row.maaps, before.ratePaise);
@@ -240,16 +252,18 @@ export const saveDay = async (date, { rows, reason }, actor, now = new Date()) =
               before: { seasonId: before.seasonId, date: before.date, numberOfMaaps: before.numberOfMaaps, payableBricks: before.payableBricks, note: before.note ?? "", earningsPaise: before.earningsPaise },
             },
           },
-        }
+        },
+        { session }
       );
       if (result.matchedCount === 1) counts.updated += 1;
       else conflict();
-    })
+    }
+    if (conflicts.length) throw conflictsError();
+    },
+    { required: true }
   );
 
-  if (conflicts.length) {
-    throw ApiError.conflict(`${conflicts.length} row${conflicts.length === 1 ? " was" : "s were"} changed by someone else. The rest were saved; reload and save again.`, conflicts);
-  }
+
   return { ...(await getDay(date)), saved: counts };
 };
 

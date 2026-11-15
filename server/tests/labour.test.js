@@ -18,6 +18,7 @@ vi.mock("../models/User.js", () => ({
   default: { findById: (id) => ({ lean: async () => users.list.find((u) => String(u._id) === String(id)) ?? null }) },
 }));
 vi.mock("../models/Counter.js", () => ({ default: makeCounterModel() }));
+vi.mock("../utils/transaction.js", () => ({ runInTransaction: (work) => db.transaction(() => work(null)) }));
 vi.mock("../models/Labour.js", async (importOriginal) => ({ default: makeLabourModel((await importOriginal()).default) }));
 vi.mock("../models/LabourRateHistory.js", async (importOriginal) => ({ default: makeRateModel((await importOriginal()).default) }));
 
@@ -216,6 +217,42 @@ describe("a failed save never leaves a half-made worker or reuses a number", () 
     expect(db.rates).toHaveLength(0);
     const next = await create(bigari());
     expect(next.id).toBe("L-002");
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("Batch 1B: a worker and the first rate are saved TOGETHER or not at all", () => {
+  it("success saves exactly one worker and one first rate starting on the joining date, in the same response shape as before", async () => {
+    const res = await asOwner("post", "/api/labours", bigari());
+    expect(res.status).toBe(201);
+    expect(db.labours.size).toBe(1);
+    expect(db.rates).toHaveLength(1);
+    expect(db.rates[0]).toMatchObject({ labourId: res.body.data.id, effectiveFrom: res.body.data.joiningDate, reason: "Initial rate" });
+    expect(res.body.data.id).toMatch(/^L-\d{3}$/);
+  });
+
+  it("when the first rate cannot be saved, the worker is rolled back too: neither record remains", async () => {
+    db.failNextRateCreate = true;
+    const res = await asOwner("post", "/api/labours", bigari());
+    expect(res.status).toBe(500);
+    expect(db.labours.size).toBe(0);
+    expect(db.rates).toHaveLength(0);
+  });
+
+  it("a duplicate mobile number is a 409 and leaves no worker and no rate", async () => {
+    await create(bigari());
+    const before = { labours: db.labours.size, rates: db.rates.length };
+    const res = await asOwner("post", "/api/labours", bigari()); // the same mobile again
+    expect(res.status).toBe(409);
+    expect({ labours: db.labours.size, rates: db.rates.length }).toEqual(before);
+  });
+
+  it("existing workers and their rate histories are not touched by a failed creation", async () => {
+    const first = await create(bigari({ mobile: "9810055501" }));
+    const snapshot = JSON.stringify([db.labours.get(first.id), db.rates]);
+    db.failNextRateCreate = true;
+    await asOwner("post", "/api/labours", bigari({ mobile: "9810055502" }));
+    expect(JSON.parse(JSON.stringify([db.labours.get(first.id), db.rates]))).toEqual(JSON.parse(snapshot)); // same content (key order is irrelevant)
   });
 });
 

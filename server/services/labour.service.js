@@ -3,6 +3,7 @@ import Counter from "../models/Counter.js";
 import Labour from "../models/Labour.js";
 import LabourRateHistory from "../models/LabourRateHistory.js";
 import ApiError from "../utils/ApiError.js";
+import { runInTransaction } from "../utils/transaction.js";
 import { todayBusinessDate } from "../utils/dates.js";
 import { paiseToRupees, parseRupeesInput } from "../utils/money.js";
 import { ratePaiseAt, sortRatesAsc } from "./labourRates.js";
@@ -156,41 +157,49 @@ export const createLabour = async (input, actor) => {
   if (await Labour.exists({ mobile: input.mobile })) throw mobileTaken();
 
   const id = await nextLabourId();
-  let labour;
-  try {
-    labour = await Labour.create({
-      _id: id,
-      labourType: input.labourType,
-      name: input.name,
-      mobile: input.mobile,
-      village: input.village,
-      joiningDate: input.joiningDate,
-      status: input.status,
-      ...(input.members?.length ? { members: input.members } : {}),
-      statusHistory: [{ status: input.status, at: new Date(), by: actor.name, reason: "Created" }],
-      createdBy: actor.id ?? null,
-    });
-  } catch (err) {
-    if (isDuplicateKey(err)) throw mobileTaken();
-    throw err;
-  }
-
-  // The first rate row starts on the joining date. If it cannot be saved, remove the brand-new record (nothing
-  // references it yet) so there is never a worker without a rate.
-  try {
-    await LabourRateHistory.create({
-      labourId: id,
-      rateType: meta.rateType,
-      ratePaise,
-      effectiveFrom: input.joiningDate,
-      reason: "Initial rate",
-      changedBy: actor.name,
-      changedById: actor.id ?? null,
-    });
-  } catch (err) {
-    await Labour.deleteOne({ _id: id });
-    throw err;
-  }
+  // The worker and the first rate are saved TOGETHER or not at all (one transaction). The id above is taken beforehand, so a failed
+  // attempt can leave a gap in the numbering, exactly as before; no half-created worker can remain.
+  await runInTransaction(
+    async (session) => {
+      try {
+        await Labour.create(
+          [
+            {
+              _id: id,
+              labourType: input.labourType,
+              name: input.name,
+              mobile: input.mobile,
+              village: input.village,
+              joiningDate: input.joiningDate,
+              status: input.status,
+              ...(input.members?.length ? { members: input.members } : {}),
+              statusHistory: [{ status: input.status, at: new Date(), by: actor.name, reason: "Created" }],
+              createdBy: actor.id ?? null,
+            },
+          ],
+          { session }
+        );
+      } catch (err) {
+        if (isDuplicateKey(err)) throw mobileTaken();
+        throw err;
+      }
+      await LabourRateHistory.create(
+        [
+          {
+            labourId: id,
+            rateType: meta.rateType,
+            ratePaise,
+            effectiveFrom: input.joiningDate,
+            reason: "Initial rate",
+            changedBy: actor.name,
+            changedById: actor.id ?? null,
+          },
+        ],
+        { session }
+      );
+    },
+    { required: true }
+  );
   return getLabour(id);
 };
 
@@ -224,15 +233,28 @@ export const updateLabour = async (id, changes, actor) => {
     labour.statusHistory.push({ status: changes.status, at: new Date(), by: actor.name, reason: changes.statusReason ?? null });
   }
 
-  try {
-    await labour.save();
-  } catch (err) {
-    if (isDuplicateKey(err)) throw mobileTaken();
-    throw err;
-  }
+  const saveLabour = async (session) => {
+    try {
+      await labour.save(session ? { session } : undefined);
+    } catch (err) {
+      if (isDuplicateKey(err)) throw mobileTaken();
+      throw err;
+    }
+  };
 
   if (firstRate && changes.joiningDate !== undefined) {
-    await LabourRateHistory.updateOne({ _id: firstRate._id }, { $set: { effectiveFrom: changes.joiningDate } });
+    // Two documents change together (the worker and the first rate that starts on the joining date): saved TOGETHER or not at
+    // all, in one transaction. On a database without transactions nothing is written and the caller gets a clear 503.
+    // (An update that does not move the joining date changes one document only, which is already atomic, so it needs none.)
+    await runInTransaction(
+      async (session) => {
+        await saveLabour(session);
+        await LabourRateHistory.updateOne({ _id: firstRate._id }, { $set: { effectiveFrom: changes.joiningDate } }, { session });
+      },
+      { required: true }
+    );
+  } else {
+    await saveLabour(null);
   }
   return getLabour(id);
 };

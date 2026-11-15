@@ -19,6 +19,7 @@ vi.mock("../models/User.js", () => ({
   default: { findById: (id) => ({ lean: async () => users.list.find((u) => String(u._id) === String(id)) ?? null }) },
 }));
 vi.mock("../models/Counter.js", () => ({ default: makeCounterModel() }));
+vi.mock("../utils/transaction.js", () => ({ runInTransaction: (work) => db.transaction(() => work(null)) }));
 vi.mock("../models/Labour.js", async (importOriginal) => ({ default: makeLabourModel((await importOriginal()).default) }));
 vi.mock("../models/LabourRateHistory.js", async (importOriginal) => ({ default: makeRateModel((await importOriginal()).default) }));
 vi.mock("../models/Attendance.js", () => ({ default: makeAttendanceModel() }));

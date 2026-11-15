@@ -19,6 +19,7 @@ vi.mock("../models/User.js", () => ({
   default: { findById: (id) => ({ lean: async () => users.list.find((u) => String(u._id) === String(id)) ?? null }) },
 }));
 vi.mock("../models/Counter.js", () => ({ default: makeCounterModel() }));
+vi.mock("../utils/transaction.js", () => ({ runInTransaction: (work) => db.transaction(() => work(null)) }));
 vi.mock("../models/Labour.js", async (importOriginal) => ({ default: makeLabourModel((await importOriginal()).default) }));
 vi.mock("../models/LabourRateHistory.js", async (importOriginal) => ({ default: makeRateModel((await importOriginal()).default) }));
 vi.mock("../models/Attendance.js", () => ({ default: makeAttendanceModel() }));
@@ -269,6 +270,7 @@ describe("the duplicate rule: one live entry per worker per date", () => {
     db.beforeMaapUpdate = () => {
       db.beforeMaapUpdate = null;
       db.maap.set("x", { _id: "x", labourId: a.id, date: today, numberOfMaaps: 99, ratePaise: 25000, earningsPaise: 618750, note: "", revision: 1, history: [], isDeleted: false });
+      db.resnapshot(); // the rival's save is committed: our rollback must not undo it
     };
     const res = await save(today, [row(a, 10)]);
     expect(res.status).toBe(409);
@@ -284,7 +286,7 @@ describe("the duplicate rule: one live entry per worker per date", () => {
     expect(db.maap.size).toBe(0);
   });
 
-  it("an entry corrected by someone else mid-save is not overwritten; the rest is saved and a retry is safe", async () => {
+  it("an entry corrected by someone else mid-save is not overwritten, and NOTHING else from the batch is saved; a retry is safe", async () => {
     const [a, b] = [await maapvali(), await maapvali()];
     await save(today, [row(a, 10), row(b, 10)]);
     db.beforeMaapUpdate = (filter) => {
@@ -293,16 +295,17 @@ describe("the duplicate rule: one live entry per worker per date", () => {
       const mine = [...db.maap.values()].find((r) => r.labourId === a.id);
       mine.numberOfMaaps = 50;
       mine.revision += 1;
+      db.resnapshot(); // the rival's change is committed: our rollback must not undo it
     };
     const res = await save(today, [row(a, 20), row(b, 20)]);
     expect(res.status).toBe(409);
     expect(res.body.errors.map((e) => e.field)).toEqual(["rows.0.labourId"]);
     expect([...db.maap.values()].find((r) => r.labourId === a.id).numberOfMaaps).toBe(50);
-    expect([...db.maap.values()].find((r) => r.labourId === b.id).numberOfMaaps).toBe(20);
+    expect([...db.maap.values()].find((r) => r.labourId === b.id).numberOfMaaps).toBe(10); // rolled back: not partially saved
 
     const retry = await save(today, [row(a, 20), row(b, 20)]);
     expect(retry.status).toBe(200);
-    expect(retry.body.data.saved).toEqual({ created: 0, updated: 1, unchanged: 1 });
+    expect(retry.body.data.saved).toEqual({ created: 0, updated: 2, unchanged: 0 });
   });
 });
 
@@ -680,5 +683,61 @@ describe("model", () => {
     expect(errorsOf({ ...valid, date: "2026-02-30" }).date).toBeDefined();
     expect(errorsOf({})).toHaveProperty("labourId");
     expect(new RealMaapEntry({ ...valid, amountPaid: 500 }).get("amountPaid")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+describe("Batch 1B: a day is saved ALL-OR-NOTHING", () => {
+  it("a database failure on the third row leaves nothing saved (the first two are rolled back) and reports an error", async () => {
+    const [a, b, c] = [await maapvali(), await maapvali(), await maapvali()];
+    let writes = 0;
+    db.beforeMaapUpdate = () => {
+      writes += 1;
+      if (writes === 3) throw new Error("simulated database failure");
+    };
+    const res = await save(today, [row(a, 10), row(b, 20), row(c, 30)]);
+    expect(res.status).toBe(500);
+    expect(db.maap.size).toBe(0);
+  });
+
+  it("a conflict on one row rolls back the other rows of the same batch", async () => {
+    const [a, b] = [await maapvali(), await maapvali()];
+    await save(today, [row(b, 5)]);
+    db.beforeMaapUpdate = (filter) => {
+      if (filter.revision === undefined) return;
+      db.beforeMaapUpdate = null;
+      const mine = [...db.maap.values()].find((r) => r.labourId === b.id);
+      mine.numberOfMaaps = 77;
+      mine.revision += 1;
+      db.resnapshot();
+    };
+    const res = await save(today, [row(b, 6), row(a, 10)]); // b conflicts, a (a new row) is written after it
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/Nothing was saved/);
+    expect(liveRows(today).map((r) => r.labourId)).toEqual([b.id]); // a was NOT left behind
+  });
+
+  it("one invalid row means no row is written and the error names the row", async () => {
+    const [a, b] = [await maapvali(), await maapvali()];
+    const res = await save(today, [row(a, 10), { labourId: b.id, maaps: -3 }]);
+    expect(res.status).toBe(400);
+    expect(res.body.errors.length).toBeGreaterThan(0);
+    expect(db.maap.size).toBe(0);
+  });
+
+  it("sending the same day again (a retry after a lost response) creates no duplicate and changes nothing", async () => {
+    const [a, b] = [await maapvali(), await maapvali()];
+    const first = await save(today, [row(a, 10), row(b, 41)]);
+    expect(first.body.data.saved).toEqual({ created: 2, updated: 0, unchanged: 0 });
+    const again = await save(today, [row(a, 10), row(b, 41)]);
+    expect(again.status).toBe(200);
+    expect(again.body.data.saved).toEqual({ created: 0, updated: 0, unchanged: 2 });
+    expect(liveRows(today)).toHaveLength(2);
+  });
+
+  it("the calculation is untouched: 41 maaps are paid as 41 maaps (maaps / 4 x rate), with no rounding down to groups of four", async () => {
+    const a = await maapvali(); // 250 rupees per 4 maaps
+    await save(today, [row(a, 41)]);
+    expect(liveRows(today)[0].earningsPaise).toBe(256250); // 41 / 4 x 250 = 2,562.50 rupees
   });
 });
