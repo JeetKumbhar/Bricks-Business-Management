@@ -1,10 +1,15 @@
 import { LABOUR_ID_PATTERN, LABOUR_STATUS, LABOUR_TYPES, LABOUR_TYPE_META, LABOUR_TYPE_VALUES } from "../constants/labour.js";
+import { PAYMENT_TYPES } from "../constants/payments.js";
+import Attendance from "../models/Attendance.js";
 import Counter from "../models/Counter.js";
 import Labour from "../models/Labour.js";
 import LabourRateHistory from "../models/LabourRateHistory.js";
+import MaapEntry from "../models/MaapEntry.js";
+import Payment from "../models/Payment.js";
+import ProductionEntry from "../models/ProductionEntry.js";
 import ApiError from "../utils/ApiError.js";
 import { runInTransaction } from "../utils/transaction.js";
-import { todayBusinessDate } from "../utils/dates.js";
+import { addDays, todayBusinessDate } from "../utils/dates.js";
 import { paiseToRupees, parseRupeesInput } from "../utils/money.js";
 import { ratePaiseAt, sortRatesAsc } from "./labourRates.js";
 
@@ -203,6 +208,24 @@ export const createLabour = async (input, actor) => {
   return getLabour(id);
 };
 
+/**
+ * Phase 1C (D1): the earliest existing record dated before `joiningDate`, or null. Read-only. Bayana (BOOKING_ADVANCE) may be
+ * dated before joining, so it never conflicts. Deleted payments / entries are ignored, as everywhere else.
+ */
+const earliestRecordBefore = async (labourId, joiningDate) => {
+  const lastAllowedDay = addDays(joiningDate, -1); // dates are YYYY-MM-DD strings: "before" == "on or before the day before"
+  const first = (model, filter) => model.find(filter).sort({ date: 1 }).limit(1).lean();
+  const groups = await Promise.all([
+    first(Attendance, { labourId, date: { $lte: lastAllowedDay } }),
+    first(MaapEntry, { labourId, isDeleted: false, date: { $lte: lastAllowedDay } }),
+    first(ProductionEntry, { teamId: labourId, isDeleted: false, date: { $lte: lastAllowedDay } }),
+    first(Payment, { recipientId: labourId, isDeleted: false, type: { $ne: PAYMENT_TYPES.BOOKING_ADVANCE }, date: { $lte: lastAllowedDay } }),
+  ]);
+  const labels = ["attendance", "Maapvali entry", "Patlavale production entry", "payment"];
+  const hits = groups.map((rows, i) => (rows[0] ? { date: rows[0].date, label: labels[i] } : null)).filter(Boolean);
+  return hits.sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
+};
+
 export const updateLabour = async (id, changes, actor) => {
   const labour = await findLabourOrThrow(id);
   const isTeam = LABOUR_TYPE_META[labour.labourType].isTeam;
@@ -217,6 +240,10 @@ export const updateLabour = async (id, changes, actor) => {
   // rate change, or the order of the history would change. (Attendance and work entries are checked in their own phases.)
   let firstRate = null;
   if (changes.joiningDate !== undefined && changes.joiningDate !== labour.joiningDate) {
+    const conflict = await earliestRecordBefore(String(labour._id), changes.joiningDate);
+    if (conflict) {
+      throw fieldError(409, `Joining date cannot be after existing records: the earliest is ${conflict.label} dated ${conflict.date}`, "joiningDate");
+    }
     const history = sortRatesAsc(await LabourRateHistory.find({ labourId: String(labour._id) }).lean());
     const second = history[1];
     if (second && changes.joiningDate >= second.effectiveFrom) {

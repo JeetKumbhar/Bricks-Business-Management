@@ -31,6 +31,30 @@ export const loadSeason = async (id) => {
   return row;
 };
 
+/**
+ * Phase 1C (P6). The guarded season write every production write takes INSIDE its transaction. It matches only while the season is
+ * still OPEN and still covers every date being written (the real invariants, not a revision read earlier), and bumps `revision`.
+ * - A season edit or close that commits first makes this match nothing: 409, and the whole transaction (entries included) rolls back.
+ * - A production write that commits first bumps the revision, so updateSeason's `revision` guard fails (409) instead of stranding entries.
+ * - Two production saves on one season both write this document: MongoDB aborts one with a transient WriteConflict and withTransaction
+ *   re-runs it, so both succeed one after the other.
+ * `dates` may hold several dates of the SAME season (a move inside one season).
+ */
+export const assertSeasonWritable = async (seasonId, dates, session) => {
+  const ordered = [...dates].sort();
+  const result = await Season.updateOne(
+    {
+      _id: seasonId,
+      status: SEASON_STATUS.OPEN,
+      startDate: { $lte: ordered[0] },
+      $or: [{ endDate: null }, { endDate: { $gte: ordered[ordered.length - 1] } }],
+    },
+    { $inc: { revision: 1 } },
+    session ? { session } : undefined
+  );
+  if (result.matchedCount !== 1) throw ApiError.conflict("This season was closed or its dates were changed while saving. Nothing was saved; reload and try again.");
+};
+
 export const listSeasons = async () => (await listSeasonRows()).map(toSeasonDto);
 export const getSeason = async (id) => toSeasonDto(await loadSeason(id));
 

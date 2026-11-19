@@ -585,13 +585,13 @@ describe("finalized bills are frozen, and Settings changes never touch them", ()
   it("keeps the old seller details after Settings change, and a new bill uses the new ones", async () => {
     await configure();
     const old = await issued();
-    await configure({ businessName: "AAYUSH CARTING AND CO", address: "New Address", bank: { accountNumber: "999999" }, proprietorName: "New Owner", numbering: { prefix: "XY" } });
+    await configure({ businessName: "AAYUSH CARTING AND CO", address: "New Address", bank: { accountNumber: "999999" }, proprietorName: "New Owner" }); // numbering is locked once a bill is issued (Phase 1C P3)
     const again = await get(old.id);
     expect(again.seller).toMatchObject({ businessName: "AAYUSH CARTING", address: "Sample Road, Sample Town", bank: { accountNumber: "1234567890" }, proprietorName: "Ramesh Patel" });
     expect(again.billNumber).toBe(old.billNumber);
     const fresh = await issued();
     expect(fresh.seller).toMatchObject({ businessName: "AAYUSH CARTING AND CO", bank: { accountNumber: "999999" } });
-    expect(fresh.billNumber).toBe(`XY/${FY()}/0001`);
+    expect(fresh.billNumber).toBe(`AC/${FY()}/0002`); // same numbering series continues
   });
 
   it("keeps the old figures too, however Settings tax rules change", async () => {

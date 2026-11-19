@@ -24,7 +24,7 @@ const { db, matches, makeAttendanceModel, makeCounterModel, makeLabourModel, mak
 const users = vi.hoisted(() => ({ list: [] }));
 // Fake transaction: snapshot the production collection, run, and on failure roll back to it but KEEP what a rival committed outside the
 // transaction. A "TransientTransactionError" re-runs the work, like session.withTransaction does.
-const txn = vi.hoisted(() => ({ active: false, sessionOp: false, budget: 0, attempts: 0, outside: new Map() }));
+const txn = vi.hoisted(() => ({ active: false, nested: false, nestedCount: 0, sessionOp: false, budget: 0, attempts: 0, outside: new Map() }));
 const connectBlocked = vi.hoisted(() => vi.fn(() => { throw new Error("TEST SAFETY: a database connection was attempted in a mocked test"); }));
 
 vi.mock("../config/db.js", () => ({ getDbStatus: async () => ({ status: "connected", name: "test" }), connectDB: connectBlocked, disconnectDB: async () => {} }));
@@ -32,6 +32,19 @@ vi.mock("../models/User.js", () => ({ default: { findById: (id) => ({ lean: asyn
 vi.mock("../models/Counter.js", () => ({ default: makeCounterModel() }));
 vi.mock("../utils/transaction.js", () => ({
   runInTransaction: async (work) => {
+    if (txn.active) {
+      // A rival request (its own required transaction since Phase 1C P6) starts while our attempt is in flight: it commits independently,
+      // so whatever it changed survives our rollback. Its operations are not ours (not counted, no conflict budget).
+      const before = new Map([...db.production].map(([k, v]) => [k, JSON.stringify(v)]));
+      txn.nested = true;
+      txn.nestedCount += 1;
+      try {
+        return await work({ fake: "rival-session" });
+      } finally {
+        txn.nested = false;
+        for (const [k, v] of db.production) if (JSON.stringify(v) !== before.get(k)) txn.outside.set(k, structuredClone(v));
+      }
+    }
     for (let attempt = 1; attempt <= 8; attempt += 1) {
       txn.attempts += 1;
       const snapshot = new Map([...db.production].map(([k, v]) => [k, structuredClone(v)]));
@@ -76,7 +89,7 @@ const { EXIT_CODES, EXPECTED_CLUSTER_HOST, EXPECTED_DB, FIXTURE, GROUPS, MAX_TRA
 // snapshot raises a transient error (the transaction is retried). The first operation of an attempt takes its snapshot afterwards.
 const baseUpdateOne = FakeProduction.updateOne;
 FakeProduction.updateOne = async (filter, update, options = {}) => {
-  if (options.session) {
+  if (options.session && !txn.nested) {
     const first = !txn.sessionOp;
     txn.sessionOp = true;
     if (!first && filter?._id !== undefined && filter.revision !== undefined && txn.budget > 0) {
@@ -158,7 +171,7 @@ const seedExisting = async () => {
 beforeEach(() => {
   db.reset();
   users.list.length = 0;
-  Object.assign(txn, { active: false, sessionOp: false, budget: 0, attempts: 0, outside: new Map() });
+  Object.assign(txn, { active: false, nested: false, nestedCount: 0, sessionOp: false, budget: 0, attempts: 0, outside: new Map() });
   FakeProduction.updateOne = emulatedUpdateOne;
   apiCalls = [];
   order = [];
@@ -421,6 +434,7 @@ describe("T: transaction, rollback and a real conflict", () => {
     const t = result.groups.T;
     expect(Object.values(t.checks).every(Boolean), JSON.stringify(t.fails)).toBe(true);
     expect(txn.attempts).toBeGreaterThanOrEqual(2);
+    expect(txn.nestedCount).toBe(1); // exactly the ONE rival correction ran as an independent nested transaction; no other nested transaction is silently absorbed
     const raceRows = [...db.production.values()].filter((r) => r.date === planDates(BASE).t.race);
     expect(raceRows).toHaveLength(1);
     expect(raceRows[0].numberOfMaaps).toBe(9);

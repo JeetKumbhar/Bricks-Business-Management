@@ -13,7 +13,7 @@ import { escapeRegExp, textKey } from "../utils/truckRules.js";
 import TruckTrip from "../models/TruckTrip.js";
 import { calculateBill, deriveTaxType } from "./billCalculations.js";
 import { assertCustomersActive, customerSnapshot, INTERNAL_KEY, loadCustomer } from "./customer.service.js";
-import { loadSettings } from "./invoiceSettings.service.js";
+import { loadSettings, lockNumbering } from "./invoiceSettings.service.js";
 import { markBilled, moveTrips, noteBillCancelled, releaseTrips, undoMove } from "./tripBilling.service.js";
 
 // Bills. Policy (documented in the Phase 11 report):
@@ -246,6 +246,7 @@ export const finalizeBill = async (id, body, actor) => {
     if (bill.status !== BILL_STATUS.DRAFT || bill.isDeleted) throw bill.status === BILL_STATUS.DRAFT ? ApiError.conflict("This draft was discarded") : ApiError.conflict(`Bill ${bill.billNumber} is already ${bill.status.toLowerCase()}`);
     if (body.revision !== undefined && body.revision !== bill.revision) throw conflictDraftOnly(bill);
     const settings = await loadSettings(session);
+    await lockNumbering(settings, session); // P3: first finalize locks the numbering settings, inside this transaction (rolls back with it)
     const seller = sellerSnapshot(settings);
     const calc = compute(bill, seller.stateCode, settings);
     const candidate = { ...bill, ...calc };

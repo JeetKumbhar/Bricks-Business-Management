@@ -9,7 +9,7 @@ import { isFutureBusinessDate, todayBusinessDate } from "../utils/dates.js";
 import { paiseToRupees } from "../utils/money.js";
 import { ratePaiseAt, sortRatesAsc } from "./labourRates.js";
 import { calculateProduction, summarizeProduction } from "./productionCalculations.js";
-import { listSeasonRows, loadSeason, seasonForDate, toSeasonDto } from "./season.service.js";
+import { assertSeasonWritable, listSeasonRows, loadSeason, seasonForDate, toSeasonDto } from "./season.service.js";
 
 // Patlavale production = a team's maaps for one business day. Rules for this module:
 //  - At most ONE live entry per team per date (partial unique index). Saving a day again corrects that entry; never adds a second.
@@ -193,6 +193,7 @@ export const saveDay = async (date, { rows, reason }, actor, now = new Date()) =
     counts.created = 0; // the callback can be re-run after a transient database error: start from zero each time
     counts.updated = 0;
     conflicts.length = 0;
+    if (changes.length > 0) await assertSeasonWritable(seasonId, [date], session); // P6: first write of the transaction; an unchanged re-send writes nothing
     for (const [i, row] of rows.entries()) {
       const before = existing.get(row.teamId);
       const conflict = () => conflicts.push({ field: `rows.${i}.teamId`, message: "Changed by someone else while saving. Reload and try again." });
@@ -291,24 +292,35 @@ export const correctEntry = async (id, { date, newMaaps, note, reason }, actor, 
 
   const { payableBricks, earningsPaise } = calculateProduction(next.numberOfMaaps, entry.ratePaise);
   const actorId = actor.id ?? null;
+  // P6: guarded season write(s) and the entry update are ONE required transaction. A season is guarded for every date written into or
+  // out of it; the seasons are taken in a fixed (id) order so two requests always lock the same pair the same way.
+  const guards = new Map([[String(entry.seasonId), [entry.date]]]);
+  guards.set(next.seasonId, [...(guards.get(next.seasonId) ?? []), next.date]);
   try {
-    const result = await ProductionEntry.updateOne(
-      { _id: entry._id, revision: entry.revision, ...live },
-      {
-        $set: { ...next, payableBricks, earningsPaise, updatedBy: actorId },
-        $inc: { revision: 1 },
-        $push: {
-          history: {
-            at: now,
-            by: actor.name,
-            byId: actorId,
-            reason,
-            before: { seasonId: entry.seasonId, date: entry.date, numberOfMaaps: entry.numberOfMaaps, payableBricks: entry.payableBricks, note: entry.note ?? "", earningsPaise: entry.earningsPaise },
+    await runInTransaction(
+      async (session) => {
+        for (const [seasonId, dates] of [...guards].sort(([a], [b]) => a.localeCompare(b))) await assertSeasonWritable(seasonId, dates, session);
+        const result = await ProductionEntry.updateOne(
+          { _id: entry._id, revision: entry.revision, ...live },
+          {
+            $set: { ...next, payableBricks, earningsPaise, updatedBy: actorId },
+            $inc: { revision: 1 },
+            $push: {
+              history: {
+                at: now,
+                by: actor.name,
+                byId: actorId,
+                reason,
+                before: { seasonId: entry.seasonId, date: entry.date, numberOfMaaps: entry.numberOfMaaps, payableBricks: entry.payableBricks, note: entry.note ?? "", earningsPaise: entry.earningsPaise },
+              },
+            },
           },
-        },
-      }
+          { session }
+        );
+        if (result.matchedCount !== 1) throw ApiError.conflict("This entry was changed by someone else. Reload and try again.");
+      },
+      { required: true }
     );
-    if (result.matchedCount !== 1) throw ApiError.conflict("This entry was changed by someone else. Reload and try again.");
   } catch (err) {
     if (isDuplicateKey(err)) throw fieldError(409, "This team already has an entry for that date", "date");
     throw err;
@@ -321,10 +333,21 @@ export const deleteEntry = async (id, { reason }, actor, now = new Date()) => {
   const entry = await loadEntry(id);
   if (entry.isDeleted) throw ApiError.conflict("This entry is already deleted");
   assertSeasonOpen(await loadSeason(entry.seasonId), "id");
-  const result = await ProductionEntry.updateOne(
-    { _id: entry._id, ...live },
-    { $set: { isDeleted: true, deletedAt: now, deletedBy: actor.name, deletedReason: reason, updatedBy: actor.id ?? null } }
+  // P6: the guarded season write and the soft delete are ONE required transaction (a delete changes the season's totals).
+  await runInTransaction(
+    async (session) => {
+      await assertSeasonWritable(String(entry.seasonId), [entry.date], session);
+      const result = await ProductionEntry.updateOne(
+        // The entry must still be exactly what this request read (same revision, season and date). If a rival changed or moved it, nothing is
+        // deleted: 409 and the whole transaction (the season guard included) rolls back. A retried callback uses the same values, so it can
+        // never delete an entry through a season it no longer belongs to.
+        { _id: entry._id, revision: entry.revision, seasonId: entry.seasonId, date: entry.date, ...live },
+        { $set: { isDeleted: true, deletedAt: now, deletedBy: actor.name, deletedReason: reason, updatedBy: actor.id ?? null } },
+        { session }
+      );
+      if (result.matchedCount !== 1) throw ApiError.conflict("This entry was changed by someone else. Reload and try again.");
+    },
+    { required: true }
   );
-  if (result.matchedCount !== 1) throw ApiError.conflict("This entry was changed by someone else. Reload and try again.");
   return getEntry(id);
 };

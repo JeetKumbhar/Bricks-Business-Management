@@ -531,7 +531,7 @@ describe("balances reconcile with earnings and payments", () => {
     await paid(patlavale, { amount: 100 });
     const all = (await asOwner("get", "/api/balances")).body;
     expect(all.data.map((l) => l.labourId)).toEqual([bigari.id, maapvali.id, patlavale.id].sort());
-    expect(all.meta.totals).toEqual({ labours: 3, earned: 3712.5, totalReceived: 600, balance: 3112.5 });
+    expect(all.meta.totals).toEqual({ labours: 3, incomplete: false, missingRateLabours: 0, earned: 3712.5, totalReceived: 600, balance: 3112.5 });
     expect(all.data.reduce((t, l) => t + l.balance, 0)).toBe(all.meta.totals.balance);
     expect((await asOwner("get", "/api/balances?labourType=PATLAVALE")).body.data).toHaveLength(1);
     expect((await asOwner("get", "/api/balances?labourType=TRUCK")).status).toBe(400);

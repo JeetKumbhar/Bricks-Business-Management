@@ -51,9 +51,19 @@ const workDto = (work) => {
 
 // ---------- Salary summary (one row per labour, plus totals by type) ----------
 
+// Phase 1C (D2, flag only): a Bigari day with no rate row at all is still counted as 0 (nothing is invented or rewritten), but it is
+// reported so a zero is never mistaken for a reliable figure.
+const missingRateInfo = (lines, range) => {
+  const gaps = lines.filter((l) => l.kind === LINE_KINDS.ATTENDANCE && l.rateMissing);
+  return { days: gaps.length, daysInPeriod: gaps.filter((l) => l.date >= range.from && l.date <= range.to).length, firstDate: gaps[0]?.date ?? null };
+};
+
 const rowFor = (labour, lines, range) => {
   const a = summarizeAccount(labour.labourType, lines, range.from, range.to);
+  const missingRate = missingRateInfo(lines, range);
   return {
+    missingRate,
+    incomplete: missingRate.days > 0,
     id: String(labour._id),
     name: labour.name,
     village: labour.village ?? null,
@@ -97,6 +107,9 @@ const typeSummary = (type, rows) => {
     outstanding: rupees(outstanding),
     overpaid: rupees(overpaid),
     overpaidCount: list.filter((r) => r._paise.toDate.balancePaise < 0).length,
+    // C1 (same definitions as summary.total): accounts of this type with attendance days that no rate could price. Display only.
+    incomplete: list.some((r) => r.incomplete),
+    missingRateAccounts: list.filter((r) => r.incomplete).length,
     _paise: { outstanding, overpaid },
   };
 };
@@ -124,6 +137,8 @@ export const getSalarySummary = async ({ from, to, labourType, status } = {}, no
         outstanding: rupees(sumPaise(byType.map((t) => t._paise.outstanding))),
         overpaid: rupees(sumPaise(byType.map((t) => t._paise.overpaid))),
         overpaidCount: plain.reduce((t, x) => t + x.overpaidCount, 0),
+        incomplete: rows.some((r) => r.incomplete),
+        missingRateAccounts: rows.filter((r) => r.incomplete).length,
       },
     },
   };
@@ -135,7 +150,7 @@ const lineDto = (l) => ({
   date: l.date,
   kind: l.kind,
   sourceId: l.sourceId,
-  ...(l.kind === LINE_KINDS.ATTENDANCE ? { status: l.status, units: l.units, rate: l.ratePaise === null ? null : rupees(l.ratePaise) } : {}),
+  ...(l.kind === LINE_KINDS.ATTENDANCE ? { status: l.status, units: l.units, rate: l.ratePaise === null ? null : rupees(l.ratePaise), rateMissing: l.ratePaise === null } : {}),
   ...(l.kind === LINE_KINDS.MAAP ? { maaps: l.maaps, ratePerFourMaaps: rupees(l.ratePaise) } : {}),
   ...(l.kind === LINE_KINDS.PRODUCTION ? { maaps: l.maaps, payableBricks: l.payableBricks, ratePer1000PayableBricks: rupees(l.ratePaise) } : {}),
   ...(l.kind === LINE_KINDS.PAYMENT ? { paymentType: l.paymentType, method: l.method, amount: rupees(l.amountPaise), countedAsReceived: l.receivedPaise > 0 } : {}),
@@ -158,6 +173,8 @@ export const getStatement = async (labourId, { from, to } = {}, now = new Date()
   return {
     labour: { id: row.id, name: row.name, labourType: row.labourType, status: row.status },
     range,
+    missingRate: row.missingRate,
+    incomplete: row.incomplete,
     opening: row.opening,
     period: row.period,
     closing: row.closing,

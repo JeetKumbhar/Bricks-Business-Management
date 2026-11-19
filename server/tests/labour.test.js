@@ -10,7 +10,7 @@ vi.hoisted(() => {
 });
 
 // No database in tests: the real Mongoose models do validation; an in-memory store replaces only the storage calls.
-const { db, makeCounterModel, makeLabourModel, makeRateModel } = await import("./helpers/memoryDb.js");
+const { db, makeAttendanceModel, makeCounterModel, makeLabourModel, makeMaapEntryModel, makePaymentModel, makeProductionEntryModel, makeRateModel } = await import("./helpers/memoryDb.js");
 const users = vi.hoisted(() => ({ list: [] }));
 
 vi.mock("../config/db.js", () => ({ getDbStatus: async () => ({ status: "connected", name: "test" }) }));
@@ -21,6 +21,10 @@ vi.mock("../models/Counter.js", () => ({ default: makeCounterModel() }));
 vi.mock("../utils/transaction.js", () => ({ runInTransaction: (work) => db.transaction(() => work(null)) }));
 vi.mock("../models/Labour.js", async (importOriginal) => ({ default: makeLabourModel((await importOriginal()).default) }));
 vi.mock("../models/LabourRateHistory.js", async (importOriginal) => ({ default: makeRateModel((await importOriginal()).default) }));
+vi.mock("../models/Attendance.js", () => ({ default: makeAttendanceModel() }));
+vi.mock("../models/MaapEntry.js", () => ({ default: makeMaapEntryModel() }));
+vi.mock("../models/ProductionEntry.js", () => ({ default: makeProductionEntryModel() }));
+vi.mock("../models/Payment.js", async (importOriginal) => ({ default: makePaymentModel((await importOriginal()).default) }));
 
 const { createApp } = await import("../app.js");
 const { signAccessToken } = await import("../services/auth.service.js");

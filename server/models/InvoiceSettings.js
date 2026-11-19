@@ -36,6 +36,9 @@ const settingsSchema = createSchema({
   defaultTaxMode: { type: String, enum: TAX_MODE_VALUES, default: TAX_MODE.GST },
   allowedTaxRatesBp: { type: [Number], default: [] }, // empty = any rate from 0 to 100 %
   units: { type: [String], default: () => [...DEFAULT_UNITS] },
+  // Phase 1C (P3): set (never cleared) by the first finalize. Once true, prefix / separator / financial-year toggle / padding cannot change.
+  numberingLocked: { type: Boolean, default: false },
+  numberingLockedAt: { type: Date, default: null },
   revision: { type: Number, default: 0 },
   updatedBy: { type: String, default: null },
   updatedByName: { type: String, default: null },

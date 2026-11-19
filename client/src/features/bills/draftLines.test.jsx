@@ -18,7 +18,7 @@ vi.mock("../../components/ui/Modal", () => ({ default: ({ open, title, children,
 afterEach(() => vi.unstubAllGlobals());
 
 const tripDto = (o = {}) => ({ id: "t1", truckId: "tr1", truckNumber: "MH12AB1234", businessDate: "2026-11-01", pheeraNo: 1, materialCategory: "BRICKS", materialName: "Bricks", quantity: 1000, unit: "bricks", destination: "Pune", customer: { id: "c1", name: "Ram" }, billingStatus: "RESERVED", bill: { id: "b1", billNumber: null, status: "DRAFT" }, isVoided: false, ...o });
-const itemDto = (o = {}) => ({ particulars: "Bricks - Truck MH12AB1234 (Pheera 1)", hsn: "", quantity: 1000, unit: "bricks", ratePaise: 0, taxRate: null, pricingUnit: "PER_THOUSAND", sourceTripId: "t1", source: { pheeraNo: 1, truckNumber: "MH12AB1234" }, taxablePaise: 0, totalPaise: 0, ...o });
+const itemDto = (o = {}) => ({ particulars: "Bricks", hsn: "", quantity: 1000, unit: "bricks", ratePaise: 0, taxRate: null, pricingUnit: "PER_THOUSAND", sourceTripId: "t1", source: { pheeraNo: 1, truckNumber: "MH12AB1234" }, taxablePaise: 0, totalPaise: 0, ...o });
 const billDto = (o = {}) => ({ id: "b1", billNumber: null, status: "DRAFT", billDate: "2026-11-01", customer: { name: "Ram", address: "", gstin: "", stateName: "", stateCode: "26", contact: "" }, customerId: "c1", taxMode: "GST", taxType: "INTRA", taxPending: false, revision: 2, sourceTripIds: ["t1"], tripCount: 1, taxableTotalPaise: 0, grandTotalPaise: 0, notes: "", items: [itemDto()], trips: [tripDto()], ...o });
 
 describe("bricks lines are priced per 1,000 (client preview mirrors the server)", () => {
@@ -47,7 +47,7 @@ describe("a Pheera line survives the editor round trip", () => {
     const check = validateBillInput({ ...form, allowedRates: [5] });
     expect(check.valid).toBe(true);
     const req = toBillRequest(check.value, 2);
-    expect(req.items[0]).toEqual({ sourceTripId: "t1", particulars: "Bricks - Truck MH12AB1234 (Pheera 1)", hsn: "6901", quantity: 1000, unit: "bricks", rate: 5500, taxRate: 5 });
+    expect(req.items[0]).toEqual({ sourceTripId: "t1", particulars: "Bricks", hsn: "6901", quantity: 1000, unit: "bricks", rate: 5500, taxRate: 5 });
     expect(req.items[1]).not.toHaveProperty("sourceTripId");
     expect(req.revision).toBe(2);
     expect(Object.keys(req.items[0])).not.toContain("pricingUnit");

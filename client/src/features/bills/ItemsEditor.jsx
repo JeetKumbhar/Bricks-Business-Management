@@ -1,7 +1,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { Button, Card, CardBody, CardHeader, Input, Select } from "../../components/ui";
 import { formatRupees } from "../../utils/money";
-import { CUSTOM_MATERIAL, defaultUnitFor, LIMITS, MATERIAL_OPTIONS, TAX_MODE, UNIT_OPTIONS } from "./billModel";
+import { CUSTOM_MATERIAL, defaultUnitFor, LIMITS, MATERIAL_OPTIONS, materialOf, TAX_MODE, UNIT_OPTIONS } from "./billModel";
 
 const UNIT_LIST_ID = "bill-unit-options";
 
@@ -56,7 +56,7 @@ export default function ItemsEditor({ items, errors, taxMode, totals, units = UN
                 <Select
                   label="Material"
                   placeholder="Choose..."
-                  value=""
+                  value={materialOf(item.particulars)}
                   onChange={(ev) => pickMaterial(i, item, ev.target.value)}
                   options={[...MATERIAL_OPTIONS, CUSTOM_MATERIAL].map((m) => ({ value: m, label: m }))}
                   wrapperClassName="col-span-2 md:col-span-3"

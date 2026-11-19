@@ -32,7 +32,7 @@ export const buildLedger = (labour, { attendance = [], rates = [], maap = [], pr
         ? production.map((r) => ({ kind: LINE_KINDS.PRODUCTION, date: r.date, sourceId: String(r._id), maaps: r.numberOfMaaps, payableBricks: r.payableBricks, ratePaise: r.ratePaise, earnedPaise: r.earningsPaise }))
         : attendance.map((r) => {
             const ratePaise = ratePaiseAt(ratesAsc, r.date);
-            return { kind: LINE_KINDS.ATTENDANCE, date: r.date, sourceId: String(r._id), status: r.status, units: ATTENDANCE_UNITS[r.status], ratePaise, earnedPaise: earnedPaiseFor(r.status, ratePaise) ?? 0 };
+            return { kind: LINE_KINDS.ATTENDANCE, date: r.date, sourceId: String(r._id), status: r.status, units: ATTENDANCE_UNITS[r.status], ratePaise, earnedPaise: earnedPaiseFor(r.status, ratePaise) ?? 0, rateMissing: ratePaise === null };
           });
   const money = payments
     .filter((p) => !p.isDeleted)

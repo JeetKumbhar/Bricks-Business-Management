@@ -13,7 +13,7 @@ vi.hoisted(() => {
 // Batch 1B closing fix: a labour UPDATE that moves the joining date changes two documents (the worker and its first rate-history
 // row). Here the REAL utils/transaction.js runs (not mocked); only mongoose.startSession is replaced by a fake session whose
 // withTransaction rolls back the in-memory store on failure. Nothing connects to a database.
-const { db, makeCounterModel, makeLabourModel, makeRateModel } = await import("./helpers/memoryDb.js");
+const { db, makeAttendanceModel, makeCounterModel, makeLabourModel, makeMaapEntryModel, makePaymentModel, makeProductionEntryModel, makeRateModel } = await import("./helpers/memoryDb.js");
 const users = vi.hoisted(() => ({ list: [] }));
 const connectBlocked = vi.hoisted(() => vi.fn(() => { throw new Error("TEST SAFETY: a database connection was attempted in a mocked test"); }));
 
@@ -22,6 +22,10 @@ vi.mock("../models/User.js", () => ({ default: { findById: (id) => ({ lean: asyn
 vi.mock("../models/Counter.js", () => ({ default: makeCounterModel() }));
 vi.mock("../models/Labour.js", async (importOriginal) => ({ default: makeLabourModel((await importOriginal()).default) }));
 vi.mock("../models/LabourRateHistory.js", async (importOriginal) => ({ default: makeRateModel((await importOriginal()).default) }));
+vi.mock("../models/Attendance.js", () => ({ default: makeAttendanceModel() }));
+vi.mock("../models/MaapEntry.js", () => ({ default: makeMaapEntryModel() }));
+vi.mock("../models/ProductionEntry.js", () => ({ default: makeProductionEntryModel() }));
+vi.mock("../models/Payment.js", async (importOriginal) => ({ default: makePaymentModel((await importOriginal()).default) }));
 
 const connectSpy = vi.spyOn(mongoose, "connect").mockImplementation(connectBlocked);
 const { createApp } = await import("../app.js");

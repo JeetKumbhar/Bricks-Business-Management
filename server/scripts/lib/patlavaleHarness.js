@@ -609,9 +609,11 @@ export const runPatlavale = async (deps, { approved, mode = "ATLAS", watchdogMs 
     const original = model.updateOne;
     const hookFn = async function (filter, update, options) {
       const kind = filter && filter._id !== undefined && filter.revision !== undefined ? "guarded" : options?.upsert === true ? "upsert" : "other";
-      if (options?.session) ops.push(kind);
-      if (state.phase === "FIRING" && !options?.session) state.passed += 1;
-      const target = options?.session && kind === "guarded" && String(filter._id) === idOf(seed) && filter.revision === 1;
+      // The rival's own correction now runs in its own (required) transaction too (Phase 1C P6), so it is recognised by the FIRING phase,
+      // not by the absence of a session.
+      if (options?.session && state.phase !== "FIRING") ops.push(kind);
+      if (state.phase === "FIRING") state.passed += 1;
+      const target = state.phase !== "FIRING" && options?.session && kind === "guarded" && String(filter._id) === idOf(seed) && filter.revision === 1;
       if (state.phase === "ARMED" && target) {
         state.phase = "FIRING"; // before the rival runs, so its own writes pass straight through (no recursion)
         state.fired += 1;

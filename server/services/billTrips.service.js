@@ -24,12 +24,13 @@ import { tripDtos } from "./truckTrip.service.js";
 //    nothing is created. All inside runInTransaction (Atlas); on a standalone MongoDB the code undoes exactly what it reserved.
 //  - requestId makes "Generate" safe to repeat: the same request returns the draft it already made.
 const label = (t) => `Pheera ${t.pheeraNo} of ${t.truckNumber} on ${t.businessDate}`;
-const shortDate = (d) => d.split("-").reverse().join("-");
 const isDuplicateKey = (err) => err?.code === 11000;
 const conflictList = (message, errors) => ApiError.conflict(message, errors.map((m) => ({ field: "tripIds", message: m })));
 
 export const tripLine = (t) => ({
-  particulars: `${t.materialName} - Truck ${t.truckNumber} - to ${t.destination} - ${shortDate(t.businessDate)} (Pheera ${t.pheeraNo})`.slice(0, LIMITS.particulars),
+  // Particulars is only the material name (the owner may edit it). Truck, destination, date and Pheera number are NOT lost: they stay on the Pheera
+  // record (and its billing history) and are copied unchanged into `source` below, linked by sourceTripId.
+  particulars: String(t.materialName ?? "").slice(0, LIMITS.particulars),
   hsn: "", quantityMilli: parseMilli(t.quantity), unit: t.unit, ratePaise: 0, taxRateBp: null, pricingUnit: pricingUnitFor(t.materialCategory),
   sourceTripId: String(t._id),
   source: { pheeraNo: t.pheeraNo, truckNumber: t.truckNumber, businessDate: t.businessDate, materialName: t.materialName, destination: t.destination, quantity: t.quantity, unit: t.unit },

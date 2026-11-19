@@ -27,7 +27,9 @@ const groupBy = (rows, key) => {
 const bigariWork = (rows, rates) => {
   const ordered = sortRatesAsc(rates ?? []);
   const earned = sumPaise(rows.map((r) => earnedPaiseFor(r.status, ratePaiseAt(ordered, r.date)) ?? 0));
-  return { earnedPaise: earned, work: { workingUnits: rows.reduce((t, r) => t + ATTENDANCE_UNITS[r.status], 0), workDays: rows.length } };
+  // Phase 1C (D2, flag only): days with no rate row count as 0 (as before) but are reported, never silently trusted.
+  const missingRateDays = rows.filter((r) => ratePaiseAt(ordered, r.date) === null).length;
+  return { earnedPaise: earned, missingRateDays, work: { workingUnits: rows.reduce((t, r) => t + ATTENDANCE_UNITS[r.status], 0), workDays: rows.length } };
 };
 const maapWork = (rows) => ({ earnedPaise: sumPaise(rows.map((r) => r.earningsPaise)), work: { maaps: rows.reduce((t, r) => t + r.numberOfMaaps, 0), workDays: rows.length } });
 const teamWork = (rows) => {
@@ -53,7 +55,7 @@ const balancesFor = async (labours) => {
 
   return labours.map((l) => {
     const id = String(l._id);
-    const { earnedPaise, work } =
+    const { earnedPaise, work, missingRateDays = 0 } =
       l.labourType === LABOUR_TYPES.MAAPVALI ? maapWork(maaps.get(id) ?? []) : l.labourType === LABOUR_TYPES.PATLAVALE ? teamWork(prod.get(id) ?? []) : bigariWork(att.get(id) ?? [], rates.get(id));
     const p = summarizePayments(paid.get(id) ?? []);
     const balance = balancePaise(earnedPaise, p.totalReceivedPaise);
@@ -70,6 +72,8 @@ const balancesFor = async (labours) => {
       notCounted: paiseToRupees(p.notCountedPaise),
       balance: paiseToRupees(balance),
       overpaid: balance < 0,
+      missingRateDays,
+      incomplete: missingRateDays > 0,
       work,
       _paise: { earnedPaise, totalReceivedPaise: p.totalReceivedPaise, balance },
     };
@@ -91,6 +95,8 @@ export const listBalances = async ({ labourType, status } = {}) => {
   const lines = await balancesFor(labours);
   const totals = {
     labours: lines.length,
+    incomplete: lines.some((l) => l.incomplete),
+    missingRateLabours: lines.filter((l) => l.incomplete).length,
     earned: paiseToRupees(sumPaise(lines.map((l) => l._paise.earnedPaise))),
     totalReceived: paiseToRupees(sumPaise(lines.map((l) => l._paise.totalReceivedPaise))),
     balance: paiseToRupees(sumPaise(lines.map((l) => l._paise.balance))),

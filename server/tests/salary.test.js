@@ -310,7 +310,7 @@ describe("summary by type and the outstanding totals", () => {
     expect(by.BIGARI).toMatchObject({ accounts: 1, earned: 1700, received: 1300, paid: 1300, seasonEarned: 2675, seasonReceived: 2300, outstanding: 375, overpaid: 0 });
     expect(by.MAAPVALI).toMatchObject({ accounts: 1, earned: 675, received: 200, seasonEarned: 1300, outstanding: 1100 });
     expect(by.PATLAVALE).toMatchObject({ accounts: 1, earned: 1412.5, received: 500, seasonEarned: 2062.5, outstanding: 1562.5 });
-    expect(summary.total).toEqual({ earned: 3787.5, received: 2000, paid: 2000, outstanding: 3037.5, overpaid: 0, overpaidCount: 0 });
+    expect(summary.total).toEqual({ earned: 3787.5, received: 2000, paid: 2000, outstanding: 3037.5, overpaid: 0, overpaidCount: 0, incomplete: false, missingRateAccounts: 0 });
   });
 
   it("the totals are the sum of the rows", async () => {

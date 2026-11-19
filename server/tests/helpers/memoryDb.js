@@ -105,6 +105,7 @@ export const db = {
     this.beforeCustomerUpdate = null;
     this.invoiceSettings.clear();
     this.beforeBillUpdate = null;
+    this.beforeSettingsUpdate = null;
     this.beforeTripInsert = null;
     this.beforeTruckUpdate = null;
     this.failHistoryInsert = false;
@@ -112,6 +113,7 @@ export const db = {
     this.beforePaymentUpdate = null;
     this.beforePaymentCreate = null;
     this.beforeProductionUpdate = null;
+    this.beforeSeasonUpdate = null;
     this.failNextProductionWrite = null;
     this.beforeMaapUpdate = null;
     this.failNextMaapWrite = null;
@@ -305,6 +307,7 @@ export const makeSeasonModel = (Real) => {
       return { toObject: () => clone(row) };
     },
     async updateOne(filter, update) {
+      db.beforeSeasonUpdate?.(filter); // lets a test commit a rival change between the service's read and this write
       const found = rows().find((r) => matches(r, filter));
       if (!found) return { matchedCount: 0, modifiedCount: 0 };
       const next = { ...found, ...clone(update.$set ?? {}) };
@@ -506,10 +509,15 @@ export const makeInvoiceSettingsModel = (Real) => {
   const base = makeDocModel(Real, db.invoiceSettings);
   return {
     find: base.find,
-    async updateOne(filter, update) {
-      const found = db.invoiceSettings.get(filter._id);
+    // Filter-aware like MongoDB: a filter that does not match an EXISTING _id with upsert:true would insert a second _id, which is E11000.
+    async updateOne(filter, update, options = {}) {
+      db.beforeSettingsUpdate?.(filter, update);
+      const found = [...db.invoiceSettings.values()].find((r) => matches(r, filter));
       if (found) return Object.assign(found, clone(update.$set), { updatedAt: new Date() }), { matchedCount: 1, modifiedCount: 1 };
-      const doc = new Real({ _id: filter._id, ...clone(update.$set) });
+      if (db.invoiceSettings.has(filter._id)) throw duplicate({ _id: 1 });
+      if (options.upsert === false) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+      const seeds = Object.fromEntries(Object.entries(filter).filter(([k, v]) => k !== "_id" && (v === null || typeof v !== "object")));
+      const doc = new Real({ _id: filter._id, ...seeds, ...clone(update.$set) });
       const err = doc.validateSync();
       if (err) throw err;
       db.invoiceSettings.set(filter._id, { ...raw(doc), updatedAt: new Date() });

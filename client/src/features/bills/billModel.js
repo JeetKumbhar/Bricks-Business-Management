@@ -35,6 +35,8 @@ export const MATERIAL_OPTIONS = ["Bricks", "Sand", "Stone", "Khadi Matti", "Graw
 export const CUSTOM_MATERIAL = "Other / Custom";
 
 /** Suggested unit when a material is picked (always editable). */
+/** The Material dropdown shows the material that Particulars currently holds (exact match), otherwise nothing is selected. Typing in Particulars stays free. */
+export const materialOf = (particulars) => MATERIAL_OPTIONS.find((m) => m === String(particulars ?? "").trim()) ?? "";
 export const defaultUnitFor = (material) => (material === "Bricks" ? "Bricks" : "Tonnes");
 
 /** Units offered in the list; the field also accepts any other text. */

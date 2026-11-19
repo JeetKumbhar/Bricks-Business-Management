@@ -261,7 +261,8 @@ describe("draft bill from Pheeras", () => {
     expect(d.items).toHaveLength(2);
     const brick = d.items.find((i) => i.sourceTripId === b1.id);
     expect(brick).toMatchObject({ quantity: 25000, unit: "bricks", pricingUnit: "PER_THOUSAND", hsn: "", taxRate: null, ratePaise: 0, source: { pheeraNo: 1, quantity: 25000 } });
-    expect(brick.particulars).toMatch(/^Bricks - Truck MH-04-AB-1001 - to Palghar - \d\d-\d\d-\d{4} \(Pheera 1\)$/);
+    expect(brick.particulars).toBe("Bricks"); // material name only; the trip details live on the Pheera and in `source`
+    expect(brick.source).toMatchObject({ pheeraNo: 1, truckNumber: "MH-04-AB-1001", destination: "Palghar", businessDate: today(), materialName: "Bricks" });
     expect(d.items.find((i) => i.sourceTripId === s1.id)).toMatchObject({ quantity: 4.5, unit: "tonnes", pricingUnit: "PER_UNIT" });
     expect(d.trips.map((t) => t.billingStatus)).toEqual(["RESERVED", "RESERVED"]);
     const t = await trip(b1.id);
@@ -843,5 +844,91 @@ describe("a bill linked to a saved customer keeps the exact saved name", () => {
     const inv = ok(await finalize(d.id));
     ok(await asOwner("patch", `/api/customers/${c.id}`, { name: "Shree Constructions Pvt Ltd" }));
     expect(await bill(inv.id)).toMatchObject({ status: "FINALIZED", customer: { name: "Shree Constructions" } });
+  });
+});
+
+
+describe("Pheera line Particulars hold only the material; trip details stay linked to the Pheera", () => {
+  it("Bricks and Soil lines get exactly the material name, with quantity, unit, pricing unit and link intact", async () => {
+    await configure();
+    const c = await mkCustomer();
+    const [b1, s1] = await mkTrips([bricks(c.id, 25000, "Test Site"), soil(c.id, 4.5, "Test Site")]);
+    const d = ok(await generate([b1.id, s1.id]), 201);
+    const brick = d.items.find((i) => i.sourceTripId === b1.id);
+    const sand = d.items.find((i) => i.sourceTripId === s1.id);
+    expect(brick).toMatchObject({ particulars: "Bricks", quantity: 25000, unit: "bricks", pricingUnit: "PER_THOUSAND", sourceTripId: b1.id });
+    expect(sand).toMatchObject({ particulars: "Soil", quantity: 4.5, unit: "tonnes", pricingUnit: "PER_UNIT", sourceTripId: s1.id });
+    expect(brick.particulars).not.toMatch(/Truck|Test Site|Pheera|\d\d-\d\d-\d{4}/);
+  });
+  it("truck number, destination, date and Pheera number are NOT lost: they stay on the Pheera record, its billing history and the line's source", async () => {
+    await configure();
+    const c = await mkCustomer();
+    const truck = await mkTruck();
+    const [b1] = await mkTrips([bricks(c.id, 25000, "Test Site")], truck);
+    const d = ok(await generate([b1.id]), 201);
+    expect(d.items[0].source).toEqual({ pheeraNo: 1, truckNumber: truck.truckNumber, businessDate: today(), materialName: "Bricks", destination: "Test Site", quantity: 25000, unit: "bricks" });
+    const t = await trip(b1.id);
+    expect(t).toMatchObject({ truckNumber: truck.truckNumber, destination: "Test Site", businessDate: today(), pheeraNo: 1, materialName: "Bricks", quantity: 25000, billingStatus: "RESERVED", billId: d.id });
+    expect(t.billingHistory[0]).toMatchObject({ action: "RESERVED", billId: d.id });
+    expect(d.trips[0]).toMatchObject({ id: b1.id, truckNumber: truck.truckNumber, destination: "Test Site", pheeraNo: 1 });
+    expect(rawTrip(b1.id)).toMatchObject({ truckNumber: truck.truckNumber, destination: "Test Site", pheeraNo: 1 }); // the stored document itself
+  });
+  it("adding Pheeras to an existing draft uses the same rule", async () => {
+    await configure();
+    const c = await mkCustomer();
+    const [a, b] = await mkTrips([bricks(c.id, 1000), soil(c.id, 3)]);
+    const d = ok(await generate([a.id]), 201);
+    const added = ok(await asOwner("post", `/api/bills/${d.id}/trips`, { tripIds: [b.id] }));
+    expect(added.items.map((i) => i.particulars)).toEqual(["Bricks", "Soil"]);
+    expect(added.items[1].source).toMatchObject({ truckNumber: expect.stringMatching(/^MH-04-AB-/), destination: "Palghar", pheeraNo: expect.any(Number) });
+  });
+  it("the owner can still edit Particulars on a Pheera line (saved as typed) without touching the link, source, quantity or unit", async () => {
+    await configure();
+    const c = await mkCustomer();
+    const [a] = await mkTrips([bricks(c.id, 25000, "Test Site")]);
+    const d = ok(await generate([a.id]), 201);
+    const u = ok(await asOwner("patch", `/api/bills/${d.id}`, { items: [{ sourceTripId: a.id, particulars: "Red Bricks (First Class)", hsn: "6901", rate: 7000, taxRate: 5 }] }));
+    expect(u.items[0]).toMatchObject({ particulars: "Red Bricks (First Class)", sourceTripId: a.id, quantity: 25000, unit: "bricks", pricingUnit: "PER_THOUSAND" });
+    expect(u.items[0].source).toMatchObject({ truckNumber: expect.any(String), destination: "Test Site", pheeraNo: 1 });
+    expect((await bill(d.id)).items[0].particulars).toBe("Red Bricks (First Class)"); // persisted, not just echoed
+    expect(rawTrip(a.id)).toMatchObject({ billingStatus: "RESERVED", destination: "Test Site" });
+  });
+  it("rate, tax, amounts, finalizing and the invoice PDF work exactly as before with the short Particulars", async () => {
+    await configure();
+    const c = await mkCustomer();
+    const [b1, s1] = await mkTrips([bricks(c.id, 25000), soil(c.id, 4.5)]);
+    const d = ok(await generate([b1.id, s1.id]), 201);
+    const filled = ok(await asOwner("patch", `/api/bills/${d.id}`, { items: [{ sourceTripId: b1.id, hsn: "6901", rate: 7000, taxRate: 5 }, { sourceTripId: s1.id, hsn: "2505", rate: 1200, taxRate: 5 }] }));
+    expect(filled.items.map((i) => i.particulars)).toEqual(["Bricks", "Soil"]); // omitted particulars keep the generated value
+    expect(filled.grandTotalPaise).toBe(18_040_000 + 902_000);
+    const done = ok(await finalize(d.id));
+    expect(done).toMatchObject({ status: "FINALIZED", grandTotalPaise: 18_040_000 + 902_000 });
+    expect(done.items.map((i) => i.particulars)).toEqual(["Bricks", "Soil"]);
+    expect(rawTrip(b1.id)).toMatchObject({ billingStatus: "BILLED", billId: d.id });
+    const pdf = await asOwner("get", `/api/bills/${d.id}/pdf`).buffer(true).parse((res, cb) => { const chunks = []; res.on("data", (x) => chunks.push(x)); res.on("end", () => cb(null, Buffer.concat(chunks))); });
+    expect(pdf.status).toBe(200);
+    expect(Buffer.from(pdf.body).subarray(0, 5).toString()).toBe("%PDF-");
+  });
+  it("manual lines are untouched: they keep exactly what was typed, with no source and no link", async () => {
+    await configure();
+    const c = await mkCustomer();
+    const m = ok(await asOwner("post", "/api/bills", { customerId: c.id, taxMode: "GST", items: [{ particulars: "Sand - Truck XYZ - to Vapi (manual note)", hsn: "2505", quantity: 3, unit: "Tonnes", rate: 1000, taxRate: 5 }] }), 201);
+    expect(m.items[0]).toMatchObject({ particulars: "Sand - Truck XYZ - to Vapi (manual note)", sourceTripId: null, source: null });
+    expect(m.grandTotalPaise).toBeGreaterThan(0);
+  });
+  it("existing data is not rewritten: an invoice or draft that already has the long text keeps it, also through cancel and correction", async () => {
+    await configure();
+    const c = await mkCustomer();
+    const [a] = await mkTrips([bricks(c.id, 25000, "Test Site")]);
+    const d = ok(await generate([a.id]), 201);
+    const OLD = "Bricks - Truck MH-04-AB-1001 - to Test Site - 19-11-2026 (Pheera 1)"; // what the old code produced
+    ok(await asOwner("patch", `/api/bills/${d.id}`, { items: [{ sourceTripId: a.id, particulars: OLD, hsn: "6901", rate: 7000, taxRate: 5 }] }));
+    const inv = ok(await finalize(d.id));
+    expect(inv.items[0].particulars).toBe(OLD);
+    expect((await bill(inv.id)).items[0].particulars).toBe(OLD); // finalized bill unchanged
+    ok(await asOwner("post", `/api/bills/${inv.id}/cancel`, { reason: "Wrong rate" }));
+    const copy = ok(await asOwner("post", `/api/bills/${inv.id}/correct`, {}), 201);
+    expect(copy.items[0].particulars).toBe(OLD); // the correction copies what was saved; nothing is regenerated
+    expect((await bill(inv.id)).items[0].particulars).toBe(OLD);
   });
 });
