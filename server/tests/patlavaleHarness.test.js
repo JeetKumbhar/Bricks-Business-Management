@@ -138,6 +138,11 @@ const makeReadDeps = (over = {}) => ({
 const makeDeps = (over = {}) => ({
   ...makeReadDeps(),
   ProductionEntry: FakeProduction,
+  closeSeason: async (id) => {
+    const { updateSeason } = await import("../services/season.service.js");
+    await updateSeason(id, { status: "CLOSED" }, owner.user);
+    return { status: 200, body: null };
+  },
   api: async (method, url, body) => {
     order.push("api");
     apiCalls.push({ method: method.toLowerCase(), url, body });

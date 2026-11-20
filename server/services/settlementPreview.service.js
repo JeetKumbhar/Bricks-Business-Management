@@ -33,6 +33,7 @@ export const settlementStatement = (labour, lines, { start, end }) => {
   const closing = a.closingPaise;
   const missingRateDays = lines.filter((l) => l.kind === LINE_KINDS.ATTENDANCE && l.rateMissing && l.date <= end).length;
   const after = lines.filter((l) => l.date > end);
+  const windowLines = lines.filter((l) => l.date >= start && l.date <= end); // every source line behind the figures (kept in the permanent statement at close)
   const status = closing > 0 ? STATEMENT_STATUS.PAYABLE : closing < 0 ? STATEMENT_STATUS.RECOVERABLE : STATEMENT_STATUS.ZERO;
   const payablePaise = Math.max(closing, 0);
   const recoverablePaise = Math.max(-closing, 0);
@@ -52,8 +53,10 @@ export const settlementStatement = (labour, lines, { start, end }) => {
     payablePaise,
     recoverablePaise,
     work: a.period.work,
-    workLines: lines.filter((l) => l.kind !== LINE_KINDS.PAYMENT && l.date >= start && l.date <= end).length,
-    paymentLines: lines.filter((l) => l.kind === LINE_KINDS.PAYMENT && l.date >= start && l.date <= end).length,
+    workLines: windowLines.filter((l) => l.kind !== LINE_KINDS.PAYMENT).length,
+    paymentLines: windowLines.filter((l) => l.kind === LINE_KINDS.PAYMENT).length,
+    openingLineCount: lines.filter((l) => l.date < start).length,
+    windowLines,
     missingRateDays,
     // Dated after the season end: not in this statement; they belong to whatever season (or gap) covers their date.
     afterEnd: { lines: after.length, firstDate: after[0]?.date ?? null },
@@ -67,7 +70,7 @@ export const settlementStatement = (labour, lines, { start, end }) => {
   };
 };
 
-const statementDto = ({ openingPaise, earnedPaise, bayanaPaise, salaryPaise, otherPaise, receivedPaise, closingPaise, payablePaise, recoverablePaise, resolution, ...rest }) => ({
+const statementDto = ({ windowLines, openingPaise, earnedPaise, bayanaPaise, salaryPaise, otherPaise, receivedPaise, closingPaise, payablePaise, recoverablePaise, resolution, ...rest }) => ({
   ...rest,
   opening: rupees(openingPaise),
   earned: rupees(earnedPaise),
@@ -80,6 +83,7 @@ const statementDto = ({ openingPaise, earnedPaise, bayanaPaise, salaryPaise, oth
   recoverable: rupees(recoverablePaise),
   resolution: { ...resolution, amount: rupees(resolution.amountPaise) },
   _paise: { openingPaise, earnedPaise, bayanaPaise, salaryPaise, otherPaise, receivedPaise, closingPaise, payablePaise, recoverablePaise },
+  _lines: windowLines,
 });
 
 // A worker is in the preview when they have any record up to the end date, or are an active worker who had joined by then.
@@ -106,7 +110,7 @@ const typeTotals = (type, items) => {
  * The whole preview. Pure: everything it needs is passed in.
  * `season` and `seasons` are plain rows; `labours` rows; `sourceFor(labour)` gives that worker's source records; `today` is a business date.
  */
-export const buildSettlementPreview = ({ season, seasons, labours, sourceFor, endDate, today }) => {
+export const computeSettlement = ({ season, seasons, labours, sourceFor, endDate, today }) => {
   const start = season.startDate;
   const end = endDate ?? season.endDate ?? today;
   const blockers = [];
@@ -146,13 +150,13 @@ export const buildSettlementPreview = ({ season, seasons, labours, sourceFor, en
     warnings.push({ code: "NEGATIVE_BALANCES", message: `${recoverable.length} worker(s) were paid more than they earned. Each needs an explicit carry-forward decision; it becomes an opening advance in the next season.`, labourIds: recoverable.map((s) => s.labourId) });
   }
   const alreadyClosed = season.status === "CLOSED";
-  if (alreadyClosed) warnings.push({ code: "ALREADY_CLOSED", message: "This season is already marked CLOSED. This preview is informational; no settlement record exists yet." });
+  if (alreadyClosed) warnings.push({ code: "ALREADY_CLOSED", message: "This season is already marked CLOSED. This preview is informational and changes nothing." });
 
-  const items = statements.map(({ _paise, ...s }) => ({ ...s, _paise }));
-  const plain = items.map(({ _paise, ...s }) => s);
+  const items = statements;
+  const plain = items.map(({ _paise, _lines, ...s }) => s);
   const byType = [LABOUR_TYPES.BIGARI, LABOUR_TYPES.MAAPVALI, LABOUR_TYPES.PATLAVALE].map((t) => typeTotals(t, items.map((s) => ({ ...s, ...s._paise }))));
   const flat = items.map((s) => s._paise);
-  return {
+  const preview = {
     season: { id: String(season._id), name: season.name, status: season.status, startDate: start, endDate: season.endDate ?? null },
     proposedEndDate: end,
     ledgerDateForSettlementPayments: end, // the books date; the actual payment date is recorded separately
@@ -175,7 +179,12 @@ export const buildSettlementPreview = ({ season, seasons, labours, sourceFor, en
     },
     notIncluded: everyone.length - rows.length, // inactive or not-yet-joined workers with no record up to the end date
   };
+  // `statements` still carry their exact paise (_paise) and source lines (_lines): the close operation stores them permanently.
+  return { preview, statements, start, end };
 };
+
+/** The preview shown to the Owner (no internal fields). */
+export const buildSettlementPreview = (args) => computeSettlement(args).preview;
 
 /** GET /api/seasons/:id/settlement-preview[?endDate=YYYY-MM-DD]. Reads only. */
 export const getSettlementPreview = async (seasonId, { endDate } = {}, now = new Date()) => {

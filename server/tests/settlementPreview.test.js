@@ -266,7 +266,7 @@ describe("season dates", () => {
   });
   it("an already-CLOSED season is previewed with a warning; nothing about it changes", async () => {
     const a = await makeSeason("Season A", D(90), D(31));
-    expect((await asOwner("patch", `/api/seasons/${a.id}`, { status: "CLOSED" })).status).toBe(200);
+    db.seasons.get(a.id).status = "CLOSED"; // closing now goes through the settlement close (S2); set the state directly here
     const body = (await preview(a.id)).body.data;
     expect(body.season.status).toBe("CLOSED");
     expect(body.warnings.map((x) => x.code)).toContain("ALREADY_CLOSED");

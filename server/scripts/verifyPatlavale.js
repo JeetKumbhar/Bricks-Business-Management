@@ -140,6 +140,12 @@ try {
       return {
         ...readDeps,
         ProductionEntry,
+        // Closes ONLY this run's own test season, through the internal service (no settlement record is written for a test season).
+        closeSeason: async (id) => {
+          const { updateSeason } = await import("../services/season.service.js");
+          await updateSeason(id, { status: "CLOSED" }, { id: null, name: "Patlavale test run" });
+          return { status: 200, body: null };
+        },
         api: async (method, urlPath, body) => {
           const { status, body: parsed } = await call(method, urlPath, body);
           return { status, body: parsed };

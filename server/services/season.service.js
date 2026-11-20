@@ -74,8 +74,15 @@ export const createSeason = async ({ name, startDate, endDate = null }, actor) =
   }
 };
 
-export const updateSeason = async (id, patch, actor) => {
+/**
+ * `forbidStatusChange` is set by the HTTP controller: over the API a season can no longer be closed or reopened by changing `status`.
+ * Closing goes through the controlled settlement close (settlement.service.js). Internal callers (the test-database harnesses) keep the default.
+ */
+export const updateSeason = async (id, patch, actor, { forbidStatusChange = false } = {}) => {
   const season = await loadSeason(id);
+  if (forbidStatusChange && patch.status !== undefined && patch.status !== season.status) {
+    throw fieldError(409, "A season's status cannot be changed here. Close it with the season closing (settlement) operation; a closed season is not reopened by editing.", "status");
+  }
   const next = { name: patch.name ?? season.name, startDate: patch.startDate ?? season.startDate, endDate: patch.endDate === undefined ? season.endDate ?? null : patch.endDate, status: patch.status ?? season.status };
   if (next.endDate && next.endDate < next.startDate) throw fieldError(400, "endDate must be on or after startDate", "endDate");
   if (season.status === SEASON_STATUS.CLOSED && next.status === SEASON_STATUS.CLOSED && (patch.startDate || patch.endDate !== undefined)) {

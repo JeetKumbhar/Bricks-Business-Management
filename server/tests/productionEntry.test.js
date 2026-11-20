@@ -245,12 +245,14 @@ describe("seasons", () => {
     const t = await team();
     await save(today, [row(t, 5)]);
     const id = (await entryFor(t, today)).id;
-    expect((await asOwner("patch", `/api/seasons/${s.id}`, { status: "CLOSED" })).body.data.status).toBe("CLOSED");
+    // Closing through PATCH is no longer possible (it goes through the settlement close, tested in settlementClose.test.js): set the state directly.
+    expect((await asOwner("patch", `/api/seasons/${s.id}`, { status: "CLOSED" })).status).toBe(409);
+    db.seasons.get(s.id).status = "CLOSED";
     expect((await save(today, [row(t, 6)])).status).toBe(409);
     expect((await asOwner("patch", `/api/production-entries/${id}`, { newMaaps: 6, reason: "Miscounted" })).status).toBe(409);
     expect((await asOwner("delete", `/api/production-entries/${id}`, { reason: "Wrong day" })).status).toBe(409);
     expect(liveRows(today)[0].numberOfMaaps).toBe(5);
-    expect((await asOwner("patch", `/api/seasons/${s.id}`, { status: "OPEN" })).status).toBe(200);
+    db.seasons.get(s.id).status = "OPEN"; // (a reopen through the API is refused; see settlementClose.test.js)
     expect((await save(today, [row(t, 6)])).status).toBe(200);
   });
 

@@ -526,7 +526,9 @@ export const runPatlavale = async (deps, { approved, mode = "ATLAS", watchdogMs 
     // Season 2: one entry while open, then close it (our own season), then every change must be refused.
     const open = await putDay(plan.p5.closedOpenDay, [row("B", 2)]);
     const [inS2] = await live1(ids.B, plan.p5.closedOpenDay);
-    const close = await api("patch", `/api/seasons/${created.season2}`, { status: "CLOSED" });
+    // Over the API a season is closed only by the settlement close (which writes permanent settlement records, wrong for a test season), so the
+    // runner supplies `closeSeason`, which uses the internal service. Without it the old PATCH is tried (the API now refuses it with 409).
+    const close = await (deps.closeSeason ?? ((id) => api("patch", `/api/seasons/${id}`, { status: "CLOSED" })))(created.season2);
     const save = await putDay(plan.p5.closedTry, [row("B", 3)]);
     const fix = await api("patch", `/api/production-entries/${idOf(inS2 ?? {})}`, { newMaaps: 9, reason: R.fix });
     const del = await api("delete", `/api/production-entries/${idOf(inS2 ?? {})}`, { reason: R.del });

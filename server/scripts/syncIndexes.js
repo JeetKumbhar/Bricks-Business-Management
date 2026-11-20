@@ -18,6 +18,8 @@ import "../models/MaapEntry.js";
 import "../models/Payment.js";
 import "../models/ProductionEntry.js";
 import "../models/Season.js";
+import "../models/SeasonSettlement.js";
+import "../models/SettlementStatement.js";
 import "../models/Truck.js";
 import "../models/TruckStatusHistory.js";
 import "../models/TruckTrip.js";

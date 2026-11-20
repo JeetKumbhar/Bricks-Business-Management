@@ -26,14 +26,16 @@ const groupBy = (rows, key) => {
 };
 const rupees = (paise) => paiseToRupees(paise);
 
-export const loadSources = async (labours) => {
+// `session` is optional: the season-closing transaction passes its own so every read sees one consistent snapshot. Salary views pass none (unchanged).
+const inSession = (query, session) => (session ? query.session(session) : query);
+export const loadSources = async (labours, session = null) => {
   const ids = labours.map((l) => String(l._id));
   const [attendance, rates, maap, production, payments] = await Promise.all([
-    Attendance.find({ labourId: { $in: ids } }).lean(),
-    LabourRateHistory.find({ labourId: { $in: ids } }).lean(),
-    MaapEntry.find({ labourId: { $in: ids }, ...live }).lean(),
-    ProductionEntry.find({ teamId: { $in: ids }, ...live }).lean(),
-    Payment.find({ recipientId: { $in: ids }, ...live }).lean(),
+    inSession(Attendance.find({ labourId: { $in: ids } }), session).lean(),
+    inSession(LabourRateHistory.find({ labourId: { $in: ids } }), session).lean(),
+    inSession(MaapEntry.find({ labourId: { $in: ids }, ...live }), session).lean(),
+    inSession(ProductionEntry.find({ teamId: { $in: ids }, ...live }), session).lean(),
+    inSession(Payment.find({ recipientId: { $in: ids }, ...live }), session).lean(),
   ]);
   const by = { attendance: groupBy(attendance, "labourId"), rates: groupBy(rates, "labourId"), maap: groupBy(maap, "labourId"), production: groupBy(production, "teamId"), payments: groupBy(payments, "recipientId") };
   return (labour) => {
