@@ -22,6 +22,7 @@
     "test:payment": "vitest run tests/payment.test.js",
     "test:salary": "vitest run tests/salary.test.js",
     "create-owner": "node scripts/createOwner.js",
+    "create-owner-prod": "node scripts/createProductionOwner.js",
     "sync-indexes": "node scripts/syncIndexes.js"
   },
   "dependencies": {
