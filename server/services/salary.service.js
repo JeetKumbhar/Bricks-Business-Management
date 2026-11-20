@@ -26,7 +26,7 @@ const groupBy = (rows, key) => {
 };
 const rupees = (paise) => paiseToRupees(paise);
 
-const loadSources = async (labours) => {
+export const loadSources = async (labours) => {
   const ids = labours.map((l) => String(l._id));
   const [attendance, rates, maap, production, payments] = await Promise.all([
     Attendance.find({ labourId: { $in: ids } }).lean(),

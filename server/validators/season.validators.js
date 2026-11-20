@@ -10,6 +10,7 @@ const endAfterStart = (b, ctx) => {
   if (b.startDate && b.endDate && b.endDate < b.startDate) ctx.addIssue({ code: "custom", path: ["endDate"], message: "endDate must be on or after startDate" });
 };
 
+export const settlementPreviewQuerySchema = z.strictObject({ endDate: businessDate.optional() });
 export const idParamsSchema = z.strictObject({ id: z.string().regex(/^[0-9a-f]{24}$/, "Not a valid season id") });
 export const createSeasonSchema = z.strictObject({ name, startDate: businessDate, endDate: businessDate.nullable().optional() }).superRefine(endAfterStart);
 export const updateSeasonSchema = z
