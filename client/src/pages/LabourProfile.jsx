@@ -32,7 +32,7 @@ export default function LabourProfile() {
   const navigate = useNavigate();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
-  const { getAnyLabour, getAttendance, getPayments, getRateHistory, updateLabour, isMobileTaken, changeRate, loadRateHistory, isRateHistoryLoaded } = useLabours();
+  const { getAnyLabour, getAttendance, getPayments, getRateHistory, updateLabour, changeRate, loadRateHistory, isRateHistoryLoaded } = useLabours();
 
   const [editOpen, setEditOpen] = useState(false);
   const [toggleOpen, setToggleOpen] = useState(false);
@@ -169,7 +169,6 @@ export default function LabourProfile() {
       <EditLabourModal
         labour={editOpen ? labour : null}
         onClose={() => setEditOpen(false)}
-        isMobileTaken={(mobile) => isMobileTaken(mobile, labour.id)}
         onSubmit={handleEdit}
         saving={saving}
       />

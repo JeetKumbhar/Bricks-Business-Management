@@ -525,7 +525,7 @@ export const d2Phase = async (ctx) => {
   const s = {};
   const actor = actorOf(ctx);
   const base = { snapshot: await othersSnapshot(ctx), measure: await measure(ctx), seq: await labourSeq(ctx) };
-  const DAY = dayOf(ctx, 20);
+  const DAY = dayOf(ctx, 70); // outside the D1 and P6 seasons (D1 closes its season): a closed season accepts no ordinary attendance
   out.push(await runTest("D2-0", "setup: a normally rated Bigari with one PRESENT day", async () => {
     s.ok = await makeLabour(ctx, "D2-OK", { n: 11, joining: dayOf(ctx, 10) });
     await ctx.svc.attendance.saveDay(DAY, { entries: [{ labourId: s.ok.id, status: "PRESENT" }], reason: FIXTURE.reasons.day }, actor);

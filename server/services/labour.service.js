@@ -23,7 +23,12 @@ const formatLabourId = (n) => `L-${String(n).padStart(3, "0")}`;
 
 const notFound = () => ApiError.notFound("Labour not found");
 const fieldError = (status, message, field) => new ApiError(status, message, [{ field, message }]);
-const mobileTaken = () => fieldError(409, "This mobile number is already registered", "mobile");
+// Mobile numbers are optional and shared, so a duplicate-key error can now only mean something else: the worker id, or an OLD database that
+// still has the unique mobile index (it must be dropped; see the release notes). Neither is the Owner's mistake, and both are said plainly.
+const duplicateKeyProblem = (err) =>
+  /mobile/.test(JSON.stringify(err?.keyPattern ?? err?.message ?? ""))
+    ? fieldError(409, "The database still enforces the old one-worker-per-mobile-number rule, so this worker cannot be saved yet. Ask your administrator to remove that index.", "mobile")
+    : ApiError.conflict("Could not save the worker (the worker id was taken at the same moment). Please try again.");
 const isDuplicateKey = (err) => err?.code === 11000;
 
 /** "L-001", "L-002", ... never reused: the counter only goes up, even if the save that follows fails. */
@@ -53,7 +58,7 @@ export const toLabourDto = (labour, historyAsc = [], today = todayBusinessDate()
     id: String(labour._id),
     labourType: labour.labourType,
     name: labour.name,
-    mobile: labour.mobile,
+    mobile: labour.mobile ?? null,
     village: labour.village,
     joiningDate: labour.joiningDate,
     status: labour.status,
@@ -159,8 +164,6 @@ export const createLabour = async (input, actor) => {
   const ratePaise = parseRupeesInput(input[meta.rateField], meta.rateField);
   if (ratePaise < 1) throw fieldError(400, "Rate must be greater than 0", meta.rateField);
 
-  if (await Labour.exists({ mobile: input.mobile })) throw mobileTaken();
-
   const id = await nextLabourId();
   // The worker and the first rate are saved TOGETHER or not at all (one transaction). The id above is taken beforehand, so a failed
   // attempt can leave a gap in the numbering, exactly as before; no half-created worker can remain.
@@ -173,7 +176,7 @@ export const createLabour = async (input, actor) => {
               _id: id,
               labourType: input.labourType,
               name: input.name,
-              mobile: input.mobile,
+              mobile: input.mobile ?? null,
               village: input.village,
               joiningDate: input.joiningDate,
               status: input.status,
@@ -185,7 +188,7 @@ export const createLabour = async (input, actor) => {
           { session }
         );
       } catch (err) {
-        if (isDuplicateKey(err)) throw mobileTaken();
+        if (isDuplicateKey(err)) throw duplicateKeyProblem(err);
         throw err;
       }
       await LabourRateHistory.create(
@@ -232,10 +235,6 @@ export const updateLabour = async (id, changes, actor) => {
 
   if (changes.members !== undefined && !isTeam) throw fieldError(400, "Members can only be listed for a Patlavale team", "members");
 
-  if (changes.mobile !== undefined && changes.mobile !== labour.mobile) {
-    if (await Labour.exists({ mobile: changes.mobile, _id: { $ne: labour._id } })) throw mobileTaken();
-  }
-
   // The first rate row starts on the joining date, so moving the joining date moves it too. It may not reach a later
   // rate change, or the order of the history would change. (Attendance and work entries are checked in their own phases.)
   let firstRate = null;
@@ -264,7 +263,7 @@ export const updateLabour = async (id, changes, actor) => {
     try {
       await labour.save(session ? { session } : undefined);
     } catch (err) {
-      if (isDuplicateKey(err)) throw mobileTaken();
+      if (isDuplicateKey(err)) throw duplicateKeyProblem(err);
       throw err;
     }
   };

@@ -156,10 +156,10 @@ describe("moving the joining date saves the worker and the first rate TOGETHER",
     expect(db.rates[0].effectiveFrom).toBe(daysAgo(70));
   });
 
-  it("a failure while saving the worker leaves the rate row untouched; a duplicate mobile is still a 409 on mobile", async () => {
+  it("a failure while saving the worker leaves the rate row untouched; an OLD database that still has the unique mobile index answers 409 on mobile", async () => {
     const l = await create(bigari());
     const before = stores();
-    env.failSave = Object.assign(new Error("E11000 duplicate key"), { code: 11000 });
+    env.failSave = Object.assign(new Error("E11000 duplicate key"), { code: 11000, keyPattern: { mobile: 1 } }); // the old unique mobile_1 index
     const dup = await asOwner("patch", `/api/labours/${l.id}`, { joiningDate: daysAgo(70), mobile: "9876543299" });
     expect(dup.status).toBe(409);
     expect(dup.body.errors[0].field).toBe("mobile");
@@ -251,12 +251,10 @@ describe("existing behaviour is unchanged", () => {
     expect(stores()).toEqual(before);
   });
 
-  it("a duplicate mobile found by the pre-check, an unknown id, a bad body and a non-owner never start a transaction", async () => {
-    const a = await create(bigari());
+  it("an unknown id, a bad body and a non-owner never start a transaction", async () => {
+    await create(bigari());
     const b = await create(bigari({ mobile: "9000000002" }));
     env.sessions.length = 0;
-    const dup = await asOwner("patch", `/api/labours/${b.id}`, { joiningDate: daysAgo(70), mobile: a.mobile });
-    expect(dup.status).toBe(409);
     expect((await asOwner("patch", "/api/labours/L-999", { joiningDate: daysAgo(70) })).status).toBe(404);
     expect((await asOwner("patch", `/api/labours/${b.id}`, { joiningDate: "2026-02-30" })).status).toBe(400);
     expect((await asOwner("patch", `/api/labours/${b.id}`, { joiningDate: daysAgo(70), dailyRate: 1 })).status).toBe(400);

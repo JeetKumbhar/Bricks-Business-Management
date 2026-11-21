@@ -3,6 +3,8 @@ import { LABOUR_STATUS, LABOUR_TYPES } from "../constants/labour.js";
 import Attendance from "../models/Attendance.js";
 import Labour from "../models/Labour.js";
 import LabourRateHistory from "../models/LabourRateHistory.js";
+import { assertDatesOpen, guardWrite } from "./writeGuard.js";
+import { runInTransaction } from "../utils/transaction.js";
 import ApiError from "../utils/ApiError.js";
 import { isFutureBusinessDate, todayBusinessDate } from "../utils/dates.js";
 import { divideRoundHalfUp, paiseToRupees } from "../utils/money.js";
@@ -135,6 +137,8 @@ const entryErrors = ({ entries, date, labours, existing }) => {
 export const saveDay = async (date, { entries, reason }, actor, now = new Date()) => {
   if (isFutureBusinessDate(date, now)) throw fieldError(400, `Attendance cannot be saved for a future date (today is ${todayBusinessDate(now)})`, "date");
 
+  await assertDatesOpen([date], "Ordinary attendance entries"); // clear early refusal; re-checked inside the write transaction below
+
   const ids = entries.map((e) => e.labourId);
   const [labourRows, existingRows] = await Promise.all([Labour.find({ _id: { $in: ids } }).lean(), Attendance.find({ date, labourId: { $in: ids } }).lean()]);
   const labours = new Map(labourRows.map((l) => [String(l._id), l]));
@@ -147,44 +151,57 @@ export const saveDay = async (date, { entries, reason }, actor, now = new Date()
   const counts = { created: 0, updated: 0, unchanged: 0 };
   const conflicts = [];
 
-  await Promise.all(
-    entries.map(async ({ labourId, status }, i) => {
-      const before = existing.get(labourId);
-      const conflict = () => conflicts.push({ field: `entries.${i}.labourId`, message: "Changed by someone else while saving. Reload and try again." });
+  // One transaction for the day: the closed-season check and the season fence come first, then every entry is written one after another (a
+  // transaction runs one operation at a time). A concurrent edit of one entry is recorded as a conflict and the rest are still saved, as before;
+  // a closed season, or a database error, saves nothing.
+  try {
+    await runInTransaction(
+      async (session) => {
+        counts.created = 0; // the callback can be re-run after a transient database error: start from zero each time
+        counts.updated = 0;
+        counts.unchanged = 0;
+        conflicts.length = 0;
+        await guardWrite([date], "Ordinary attendance entries", session);
+        const opts = (extra = {}) => (session ? { ...extra, session } : extra);
+        for (const [i, { labourId, status }] of entries.entries()) {
+          const before = existing.get(labourId);
+          const conflict = () => conflicts.push({ field: `entries.${i}.labourId`, message: "Changed by someone else while saving. Reload and try again." });
 
-      if (!before) {
-        try {
+          if (!before) {
+            const result = await Attendance.updateOne(
+              { labourId, date },
+              { $setOnInsert: { labourId, date, status, revision: 1, history: [], createdBy: actorId, updatedBy: actorId } },
+              opts({ upsert: true })
+            );
+            if (result.upsertedCount === 1) counts.created += 1;
+            else conflict(); // someone created it between our check and our write
+            continue;
+          }
+
+          if (before.status === status) {
+            counts.unchanged += 1; // saving the same status again is a no-op: no new revision, no audit noise
+            continue;
+          }
+          // Only applies if the record still has the status we read, so two people correcting at once cannot overwrite each other unseen.
           const result = await Attendance.updateOne(
-            { labourId, date },
-            { $setOnInsert: { labourId, date, status, revision: 1, history: [], createdBy: actorId, updatedBy: actorId } },
-            { upsert: true }
+            { labourId, date, status: before.status },
+            {
+              $set: { status, updatedBy: actorId },
+              $inc: { revision: 1 },
+              $push: { history: { from: before.status, to: status, at: now, by: actor.name, byId: actorId, reason: reason ?? null } },
+            },
+            opts()
           );
-          if (result.upsertedCount === 1) counts.created += 1;
-          else conflict(); // someone created it between our check and our write
-        } catch (err) {
-          if (!isDuplicateKey(err)) throw err;
-          conflict();
+          if (result.matchedCount === 1) counts.updated += 1;
+          else conflict();
         }
-        return;
-      }
-
-      if (before.status === status) {
-        counts.unchanged += 1; // saving the same status again is a no-op: no new revision, no audit noise
-        return;
-      }
-      // Only applies if the record still has the status we read, so two people correcting at once cannot overwrite each other unseen.
-      const result = await Attendance.updateOne(
-        { labourId, date, status: before.status },
-        {
-          $set: { status, updatedBy: actorId },
-          $inc: { revision: 1 },
-          $push: { history: { from: before.status, to: status, at: now, by: actor.name, byId: actorId, reason: reason ?? null } },
-        }
-      );
-      if (result.matchedCount === 1) counts.updated += 1;
-      else conflict();
-    })
-  );
+      },
+      { required: true }
+    );
+  } catch (err) {
+    if (!isDuplicateKey(err)) throw err;
+    throw ApiError.conflict("An entry for this day was created by someone else at the same moment. Nothing was saved; reload and save again.", [{ field: "entries", message: "Changed by someone else while saving. Reload and try again." }]);
+  }
 
   if (conflicts.length) {
     throw ApiError.conflict(`${conflicts.length} entr${conflicts.length === 1 ? "y was" : "ies were"} changed by someone else. The rest were saved; reload and save again.`, conflicts);

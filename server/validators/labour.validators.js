@@ -12,14 +12,18 @@ const joiningDate = businessDate.refine((value) => !isValidBusinessDate(value) |
 const rate = z.number("Rate must be a number").positive("Rate must be greater than 0").max(MAX_RATE_RUPEES, `Rate cannot be more than ${MAX_RATE_RUPEES}`);
 
 const name = z.string().trim().min(2, "Name is required").max(60, "Name is too long");
-const mobile = z.string().trim().regex(MOBILE_PATTERN, "Enter a valid 10-digit mobile number");
+// Optional: omitted, null, "" and blank all mean "no mobile number" and become null. A number that is given must still be 10 digits.
+const mobile = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+  z.string().trim().regex(MOBILE_PATTERN, "Enter a valid 10-digit mobile number").nullable()
+);
 const village = z.string().trim().min(1, "Village is required").max(60, "Village name is too long");
 const status = z.enum(LABOUR_STATUS_VALUES);
 const members = z
   .array(z.strictObject({ name: z.string().trim().min(1, "Member name is required").max(60), relation: z.string().trim().max(30).optional() }))
   .max(MAX_TEAM_MEMBERS, `A team can list at most ${MAX_TEAM_MEMBERS} members`);
 
-const common = { name, mobile, village, joiningDate, status: status.default("ACTIVE") };
+const common = { name, mobile: mobile.optional(), village, joiningDate, status: status.default("ACTIVE") };
 
 export const createLabourSchema = z.discriminatedUnion("labourType", [
   z.strictObject({ labourType: z.literal(LABOUR_TYPES.BIGARI), ...common, dailyRate: rate }),
@@ -31,7 +35,7 @@ export const createLabourSchema = z.discriminatedUnion("labourType", [
 export const updateLabourSchema = z
   .strictObject({
     name: name.optional(),
-    mobile: mobile.optional(),
+    mobile: mobile.optional(), // null or "" clears it
     village: village.optional(),
     joiningDate: businessDate.optional(),
     status: status.optional(),

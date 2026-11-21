@@ -8,6 +8,7 @@ import { LABOUR_STATUS, LABOUR_STATUS_META } from "../../utils/labourStatus";
 import LabourAvatar from "./LabourAvatar";
 import { getWorkSummary } from "./labourSummaries";
 import LabourTypeBadge from "./LabourTypeBadge";
+import { normalizeMobile } from "../../utils/mobile";
 
 /** Phone layout for one worker or team (replaces a table row below the md breakpoint). */
 export default function LabourCard({ labour, onView, onEdit, onToggleStatus }) {
@@ -36,14 +37,18 @@ export default function LabourCard({ labour, onView, onEdit, onToggleStatus }) {
         <div>
           <dt className="type-small">{labour.labourType === "PATLAVALE" ? "Contact Mobile" : "Mobile"}</dt>
           <dd>
-            <a
-              href={`tel:${labour.mobile}`}
-              className="inline-flex items-center gap-1.5 py-0.5 font-medium text-primary"
-              aria-label={`Call ${labour.name}`}
-            >
-              <Phone className="h-3.5 w-3.5" aria-hidden="true" />
-              {labour.mobile}
-            </a>
+            {normalizeMobile(labour.mobile) ? (
+              <a
+                href={`tel:${labour.mobile}`}
+                className="inline-flex items-center gap-1.5 py-0.5 font-medium text-primary"
+                aria-label={`Call ${labour.name}`}
+              >
+                <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+                {labour.mobile}
+              </a>
+            ) : (
+              <span className="text-fg-muted">Not given</span>
+            )}
           </dd>
         </div>
         <div>

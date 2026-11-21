@@ -13,15 +13,13 @@ import LabourTypeSelect from "./LabourTypeSelect";
  *
  * mode "add":  choose the type; the rate field and labels follow the type.
  * mode "edit": type and rate are read-only (the rate changes through its own flow, never here).
- * isMobileTaken(mobile): true if another labour already uses it.
  */
-export default function LabourForm({ formId, mode = "add", defaultValues, labourId, isMobileTaken, onSubmit }) {
+export default function LabourForm({ formId, mode = "add", defaultValues, labourId, onSubmit }) {
   const isEdit = mode === "edit";
 
   const {
     register,
     handleSubmit,
-    setError,
     setValue,
     control,
     watch,
@@ -32,13 +30,8 @@ export default function LabourForm({ formId, mode = "add", defaultValues, labour
   const meta = LABOUR_TYPE_META[labourType];
   const isTeam = labourType === LABOUR_TYPES.PATLAVALE;
 
-  const submit = (values) => {
-    if (isMobileTaken(values.mobile)) {
-      setError("mobile", { type: "validate", message: "This mobile number is already registered" });
-      return;
-    }
-    onSubmit(values);
-  };
+  // The mobile number is optional and may be shared with another worker, so there is no duplicate check here.
+  const submit = (values) => onSubmit(values);
 
   return (
     <form id={formId} onSubmit={handleSubmit(submit)} noValidate className="grid gap-4 sm:grid-cols-2">
@@ -90,11 +83,11 @@ export default function LabourForm({ formId, mode = "add", defaultValues, labour
       />
 
       <Input
-        label={meta.mobileLabel}
-        required
+        label={`${meta.mobileLabel} (optional)`}
         inputMode="numeric"
         maxLength={10}
         placeholder="9876543210"
+        hint="Leave empty if there is no phone. The same number can be used for more than one worker."
         error={errors.mobile?.message}
         {...register("mobile")}
       />

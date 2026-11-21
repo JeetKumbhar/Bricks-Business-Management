@@ -467,11 +467,11 @@ describe("D1 (Tier B)", () => {
     expect(again.verdict, bad(again)).toBe(0);
     expect(liveFixtureLabours()).toHaveLength(12);
   });
-  it("a duplicate mobile is refused by the app (no overwrite): the colliding run fails at setup", async () => {
+  it("a worker who already has the fixture's mobile number is never overwritten (numbers are shared now; the run makes its own fixtures)", async () => {
     await services.labour.createLabour({ labourType: "BIGARI", name: "Someone", mobile: "9009000101", village: "V", joiningDate: "2026-01-01", status: "ACTIVE", dailyRate: 650 }, OWNER);
-    const r = await run("d1", {}, deps({ runNumber: 1 }));
-    expect(byId(r, "D1-0").status).toBe("FAIL");
-    expect(db.labours.size).toBe(1);
+    const before = JSON.stringify([...db.labours.values()].find((l) => l.name === "Someone"));
+    await run("d1", {}, deps({ runNumber: 1 }));
+    expect(JSON.stringify([...db.labours.values()].find((l) => l.name === "Someone"))).toBe(before);
   });
 });
 
@@ -692,19 +692,19 @@ describe("D2 no-rate fixture id: model validity, attendance, counter and retry s
     expect(db.counters.labour).toBe(21);
     const next = await services.labour.createLabour({ labourType: "BIGARI", name: "Real next", mobile: "9812345679", village: "V", joiningDate: "2024-01-01", status: "ACTIVE", dailyRate: 700 }, { name: "t", id: null });
     expect(next.id).toBe("L-022");
-    expect(r.ledger.map((x) => `${x.collection}:${x.id}`)).toEqual(["labours:L-020", "attendance:L-020@2001-03-21", "counters:labour", "labours:L-021", "attendance:L-021@2001-03-21"]);
+    expect(r.ledger.map((x) => `${x.collection}:${x.id}`)).toEqual(["labours:L-020", "attendance:L-020@2001-05-10", "counters:labour", "labours:L-021", "attendance:L-021@2001-05-10"]);
   });
   it("the no-rate scenario is preserved with the valid id: attendance saved, no rate row, flagged in all views, earns nothing", async () => {
     db.counters.labour = 19;
     const r = await run("d2", { directInsert: true });
     expect(byId(r, "D2-2").status).toBe("PASS");
     expect(db.rates.filter((x) => x.labourId === "L-021")).toEqual([]);
-    expect([...db.attendance.values()].find((a) => a.labourId === "L-021")).toMatchObject({ status: "PRESENT", date: "2001-03-21", revision: 1, history: [] });
+    expect([...db.attendance.values()].find((a) => a.labourId === "L-021")).toMatchObject({ status: "PRESENT", date: "2001-05-10", revision: 1, history: [] });
     const bal = await services.balance.getBalance("L-021");
     expect(bal).toMatchObject({ incomplete: true, missingRateDays: 1, earned: 0 });
     const row = (await services.salary.getSalarySummary()).items.find((x) => x.id === "L-021");
     expect(row).toMatchObject({ incomplete: true });
-    expect(row.missingRate).toMatchObject({ days: 1, firstDate: "2001-03-21" });
+    expect(row.missingRate).toMatchObject({ days: 1, firstDate: "2001-05-10" });
   });
   it("a collision on the reserved id leaves a counter gap but no overwrite and no duplicate (same as the app)", async () => {
     db.counters.labour = 19;

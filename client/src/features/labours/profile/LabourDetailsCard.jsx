@@ -5,6 +5,7 @@ import { formatRate } from "../../../utils/formatRate";
 import { LABOUR_STATUS_META } from "../../../utils/labourStatus";
 import { LABOUR_TYPE_META, LABOUR_TYPES } from "../../../utils/labourTypes";
 import LabourTypeBadge from "../LabourTypeBadge";
+import { normalizeMobile } from "../../../utils/mobile";
 
 /**
  * Details for any type. The rate row follows the type: Daily Rate, Rate per Maap, or Rate per 1,000 Payable Bricks.
@@ -21,10 +22,12 @@ export default function LabourDetailsCard({ labour, className }) {
     { label: "Labour Type", value: <LabourTypeBadge type={labour.labourType} /> },
     {
       label: meta.mobileLabel,
-      value: (
+      value: normalizeMobile(labour.mobile) ? (
         <a href={`tel:${labour.mobile}`} className="text-primary">
           {labour.mobile}
         </a>
+      ) : (
+        "Not given"
       ),
     },
     { label: "Village", value: labour.village },

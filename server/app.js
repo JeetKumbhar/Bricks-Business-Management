@@ -23,6 +23,7 @@ import truckRoutes from "./routes/truck.routes.js";
 import truckTripRoutes from "./routes/truckTrip.routes.js";
 import salaryRoutes from "./routes/salary.routes.js";
 import seasonRoutes from "./routes/season.routes.js";
+import settlementPaymentRoutes from "./routes/settlementPayment.routes.js";
 
 // Built as a function so tests can create a fresh app. Nothing here listens on a port (see server.js).
 // options.loginRateLimit lets tests use a small limit; production uses the defaults.
@@ -68,6 +69,7 @@ export function createApp({ loginRateLimit } = {}) {
   app.use("/api/labours", labourRoutes);
   app.use("/api/attendance", attendanceRoutes);
   app.use("/api/maap-entries", maapEntryRoutes);
+  app.use("/api/seasons", settlementPaymentRoutes);
   app.use("/api/seasons", seasonRoutes);
   app.use("/api/payments", paymentRoutes);
   app.use("/api/balances", balancesRouter);

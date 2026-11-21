@@ -25,7 +25,9 @@ const labourSchema = createSchema({
   _id: { type: String, match: LABOUR_ID_PATTERN },
   labourType: { type: String, enum: LABOUR_TYPE_VALUES, required: true, immutable: true },
   name: { type: String, required: true, trim: true, minlength: 2, maxlength: 60 },
-  mobile: { type: String, required: true, trim: true, match: [MOBILE_PATTERN, "mobile must be a 10-digit Indian mobile number"] },
+  // Optional and NOT unique: a worker may have no phone, and family members or one person registered in two categories may share a number.
+  // "No number" is always stored as null (an empty or blank value is turned into null), never as an empty string.
+  mobile: { type: String, default: null, trim: true, set: (v) => (typeof v === "string" && v.trim() === "" ? null : v), match: [MOBILE_PATTERN, "mobile must be a 10-digit Indian mobile number"] },
   village: { type: String, required: true, trim: true, minlength: 1, maxlength: 60 },
   joiningDate: businessDateField({ required: true }),
   status: { type: String, enum: LABOUR_STATUS_VALUES, default: LABOUR_STATUS.ACTIVE },
@@ -47,8 +49,7 @@ const labourSchema = createSchema({
   createdBy: { type: String, default: null },
 });
 
-// One account per mobile number, enforced by the database. Inactive records keep their number.
-labourSchema.index({ mobile: 1 }, { unique: true });
+// No index on mobile: it is not an identity (the worker id is). An older database may still hold a unique `mobile_1` index; see the release notes.
 labourSchema.index({ labourType: 1, status: 1 });
 labourSchema.index({ joiningDate: 1 });
 

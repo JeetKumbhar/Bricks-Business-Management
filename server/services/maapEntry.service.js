@@ -4,6 +4,7 @@ import Labour from "../models/Labour.js";
 import LabourRateHistory from "../models/LabourRateHistory.js";
 import MaapEntry from "../models/MaapEntry.js";
 import ApiError from "../utils/ApiError.js";
+import { assertDatesOpen, guardWrite } from "./writeGuard.js";
 import { runInTransaction } from "../utils/transaction.js";
 import { isFutureBusinessDate, todayBusinessDate } from "../utils/dates.js";
 import { paiseToRupees } from "../utils/money.js";
@@ -127,6 +128,8 @@ export const saveDay = async (date, { rows, reason }, actor, now = new Date()) =
   const today = todayBusinessDate(now);
   if (isFutureBusinessDate(date, now)) throw fieldError(400, `Maap work cannot be saved for a future date (today is ${today})`, "date");
 
+  await assertDatesOpen([date], "Ordinary Maapvali entries"); // clear early refusal; re-checked inside the write transaction below
+
   const ids = rows.map((r) => r.labourId);
   const [labourRows, existingRows, rateRows] = await Promise.all([
     Labour.find({ _id: { $in: ids } }).lean(),
@@ -165,6 +168,7 @@ export const saveDay = async (date, { rows, reason }, actor, now = new Date()) =
     counts.created = 0; // the callback can be re-run after a transient database error: start from zero each time
     counts.updated = 0;
     conflicts.length = 0;
+    await guardWrite([date], "Ordinary Maapvali entries", session); // closed season => nothing is saved; an open season is fenced against a concurrent close
     for (const [i, row] of rows.entries()) {
       const before = existing.get(row.labourId);
       const conflict = () => conflicts.push({ field: `rows.${i}.labourId`, message: "Changed by someone else while saving. Reload and try again." });
@@ -256,24 +260,33 @@ export const correctEntry = async (id, { date, numberOfMaaps, note, reason }, ac
   }
 
   const actorId = actor.id ?? null;
+  const touched = [entry.date, next.date]; // both the day it leaves and the day it moves to must be outside any closed season
+  await assertDatesOpen(touched, "Ordinary Maapvali entries");
   try {
-    const result = await MaapEntry.updateOne(
-      { _id: entry._id, revision: entry.revision, ...live },
-      {
-        $set: { ...next, earningsPaise: maapvaliEarningsPaise(next.numberOfMaaps, entry.ratePaise), updatedBy: actorId },
-        $inc: { revision: 1 },
-        $push: {
-          history: {
-            at: now,
-            by: actor.name,
-            byId: actorId,
-            reason,
-            before: { date: entry.date, numberOfMaaps: entry.numberOfMaaps, note: entry.note ?? "", earningsPaise: entry.earningsPaise },
+    await runInTransaction(
+      async (session) => {
+        await guardWrite(touched, "Ordinary Maapvali entries", session);
+        const result = await MaapEntry.updateOne(
+          { _id: entry._id, revision: entry.revision, ...live },
+          {
+            $set: { ...next, earningsPaise: maapvaliEarningsPaise(next.numberOfMaaps, entry.ratePaise), updatedBy: actorId },
+            $inc: { revision: 1 },
+            $push: {
+              history: {
+                at: now,
+                by: actor.name,
+                byId: actorId,
+                reason,
+                before: { date: entry.date, numberOfMaaps: entry.numberOfMaaps, note: entry.note ?? "", earningsPaise: entry.earningsPaise },
+              },
+            },
           },
-        },
-      }
+          session ? { session } : undefined
+        );
+        if (result.matchedCount !== 1) throw ApiError.conflict("This entry was changed by someone else. Reload and try again.");
+      },
+      { required: true }
     );
-    if (result.matchedCount !== 1) throw ApiError.conflict("This entry was changed by someone else. Reload and try again.");
   } catch (err) {
     if (isDuplicateKey(err)) throw fieldError(409, "This worker already has an entry for that date", "date");
     throw err;
@@ -285,10 +298,18 @@ export const correctEntry = async (id, { date, numberOfMaaps, note, reason }, ac
 export const deleteEntry = async (id, { reason }, actor, now = new Date()) => {
   const entry = await loadEntry(id);
   if (entry.isDeleted) throw ApiError.conflict("This entry is already deleted");
-  const result = await MaapEntry.updateOne(
-    { _id: entry._id, ...live },
-    { $set: { isDeleted: true, deletedAt: now, deletedBy: actor.name, deletedReason: reason, updatedBy: actor.id ?? null } }
+  await assertDatesOpen([entry.date], "Ordinary Maapvali entries");
+  await runInTransaction(
+    async (session) => {
+      await guardWrite([entry.date], "Ordinary Maapvali entries", session);
+      const result = await MaapEntry.updateOne(
+        { _id: entry._id, ...live },
+        { $set: { isDeleted: true, deletedAt: now, deletedBy: actor.name, deletedReason: reason, updatedBy: actor.id ?? null } },
+        session ? { session } : undefined
+      );
+      if (result.matchedCount !== 1) throw ApiError.conflict("This entry was changed by someone else. Reload and try again.");
+    },
+    { required: true }
   );
-  if (result.matchedCount !== 1) throw ApiError.conflict("This entry was changed by someone else. Reload and try again.");
   return getEntry(id);
 };

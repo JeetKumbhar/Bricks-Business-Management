@@ -12,6 +12,7 @@ const seasonSchema = createSchema({
   endDate: businessDateField({ default: null, validate: { validator: (v) => v === null || isValidBusinessDate(v), message: "endDate must be a valid date in YYYY-MM-DD form" } }),
   status: { type: String, enum: SEASON_STATUS_VALUES, default: SEASON_STATUS.OPEN },
   revision: { type: Number, default: 1, min: 1 },
+  writeVersion: { type: Number, default: 0 }, // bumped by entries written into an OPEN season, so closing it at the same moment conflicts (closed-season guard)
   createdBy: { type: String, default: null },
   updatedBy: { type: String, default: null },
 });

@@ -5,10 +5,10 @@ import { toFormValues } from "./labourRecord";
 const FORM_ID = "edit-labour-form";
 
 /**
- * <EditLabourModal labour={editingLabour} onClose isMobileTaken={(mobile) => ...} onSubmit={(id, values) => ...} />
+ * <EditLabourModal labour={editingLabour} onClose onSubmit={(id, values) => ...} />
  * Opens whenever `labour` is set. Type and rate are shown read-only.
  */
-export default function EditLabourModal({ labour, onClose, isMobileTaken, onSubmit, saving = false }) {
+export default function EditLabourModal({ labour, onClose, onSubmit, saving = false }) {
   return (
     <Modal
       open={Boolean(labour)}
@@ -32,7 +32,6 @@ export default function EditLabourModal({ labour, onClose, isMobileTaken, onSubm
           formId={FORM_ID}
           mode="edit"
           labourId={labour.id}
-          isMobileTaken={isMobileTaken}
           onSubmit={(values) => onSubmit(labour.id, values)}
           defaultValues={toFormValues(labour)}
         />

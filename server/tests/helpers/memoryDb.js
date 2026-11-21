@@ -90,6 +90,7 @@ export const db = {
   failNextRateCreate: false,
   reset() {
     this.labours.clear();
+    this.legacyUniqueMobile = false;
     this.rates.length = 0;
     this.attendance.clear();
     this.maap.clear();
@@ -132,12 +133,14 @@ export const makeCounterModel = () => ({
 
 export const makeLabourModel = (Real) => {
   const assertUnique = (row) => {
-    for (const other of db.labours.values()) if (other._id !== row._id && other.mobile === row.mobile) throw duplicate({ mobile: 1 });
+    // Mobile numbers are not unique any more. `db.legacyUniqueMobile` simulates an OLD database that still has the unique mobile_1 index (null counts as a value there).
+    if (db.legacyUniqueMobile) for (const other of db.labours.values()) if (other._id !== row._id && (other.mobile ?? null) === (row.mobile ?? null)) throw duplicate({ mobile: 1 });
   };
   const persist = (doc, isNew) => {
     const err = doc.validateSync();
     if (err) throw err;
     const row = raw(doc);
+    if (isNew && db.labours.has(row._id)) throw duplicate({ _id: 1 }); // the worker id is unique, as in the real database
     assertUnique(row);
     const now = new Date();
     row.createdAt = isNew ? now : db.labours.get(row._id).createdAt;
@@ -374,6 +377,7 @@ export const makePaymentModel = (Real) => {
       return rows().filter((r) => matches(r, filter)).length;
     },
     async create(data) {
+      if (Array.isArray(data)) return Promise.all(data.map((d) => this.create(d))); // create([doc], { session })
       db.beforePaymentCreate?.(data);
       const doc = new Real(data);
       const err = doc.validateSync();

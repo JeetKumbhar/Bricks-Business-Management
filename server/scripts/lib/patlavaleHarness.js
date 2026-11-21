@@ -71,7 +71,7 @@ export const planDates = (base) => {
     p2: { day: d(10), invalid: d(11), other: d(12) },
     p3: { before: d(15), later: d(16), rateChange: d(20), after: d(25) },
     p4: { move: d(13), target: d(14), future: null },
-    p5: { closedOpenDay: d(30), closedTry: d(31), noSeason: d(FIXTURE.noSeasonOffset), payment: d(40), beforeJoining: d(FIXTURE.joiningOffset - 10) },
+    p5: { closedOpenDay: d(30), closedTry: d(31), noSeason: d(FIXTURE.noSeasonOffset), payment: d(FIXTURE.noSeasonOffset), beforeJoining: d(FIXTURE.joiningOffset - 10) },
     t: { race: d(22), control: d(23) },
   };
 };

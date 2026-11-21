@@ -3,6 +3,7 @@
 // (server/routes/*.routes.js, server/validators/*.validators.js). Responses follow { success, message, data, meta }.
 // The server stays the authority: it re-validates everything and decides rates, earnings, seasons and duplicates.
 import { LABOUR_TYPE_META } from "../utils/labourTypes";
+import { normalizeMobile } from "../utils/mobile";
 import { api } from "./api";
 
 const PAGE_SIZE = 500; // the largest page the server allows
@@ -83,7 +84,7 @@ export const toCreateLabourBody = (values) => {
   return {
     labourType: values.labourType,
     name: values.name,
-    mobile: values.mobile,
+    mobile: normalizeMobile(values.mobile),
     village: values.village,
     joiningDate: values.joiningDate,
     status: values.status,
@@ -95,7 +96,12 @@ export const toCreateLabourBody = (values) => {
 export const toUpdateLabourBody = (current, changes) => {
   const body = {};
   for (const field of EDITABLE_FIELDS) {
-    if (changes[field] !== undefined && changes[field] !== current[field]) body[field] = changes[field];
+    if (changes[field] === undefined) continue;
+    if (field === "mobile") {
+      // Optional: "" (or blanks) clears the number (sent as null); an unchanged or still-empty number is not sent.
+      const next = normalizeMobile(changes.mobile);
+      if (next !== normalizeMobile(current.mobile)) body.mobile = next;
+    } else if (changes[field] !== current[field]) body[field] = changes[field];
   }
   return body;
 };

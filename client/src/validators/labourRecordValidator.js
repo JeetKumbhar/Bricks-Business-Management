@@ -12,7 +12,7 @@ const whole = z.number().int().min(0);
 const common = {
   id: recordId,
   name: z.string().trim().min(2),
-  mobile: z.string().regex(/^[6-9]\d{9}$/, "10-digit mobile number"),
+  mobile: z.string().regex(/^[6-9]\d{9}$/, "10-digit mobile number").nullable().optional(),
   village: z.string().trim().min(1),
   status: z.enum(["ACTIVE", "INACTIVE"]),
   joiningDate: isoDate,

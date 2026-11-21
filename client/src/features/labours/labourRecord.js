@@ -14,7 +14,7 @@ export const toLabourInput = ({ rate, ...rest }) => ({
 export const toFormValues = (labour) => ({
   labourType: labour.labourType,
   name: labour.name,
-  mobile: labour.mobile,
+  mobile: labour.mobile ?? "",
   village: labour.village,
   joiningDate: labour.joiningDate,
   rate: String(getRate(labour)),

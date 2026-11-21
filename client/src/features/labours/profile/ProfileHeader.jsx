@@ -7,6 +7,7 @@ import { LABOUR_STATUS, LABOUR_STATUS_META } from "../../../utils/labourStatus";
 import { LABOUR_TYPES } from "../../../utils/labourTypes";
 import LabourAvatar from "../LabourAvatar";
 import LabourTypeBadge from "../LabourTypeBadge";
+import { normalizeMobile } from "../../../utils/mobile";
 
 /** Top card for a Bigari, a Maapvali or a Patlavale team: who it is, current balance, and quick actions. */
 export default function ProfileHeader({ labour, onEdit, onToggleStatus }) {
@@ -48,13 +49,15 @@ export default function ProfileHeader({ labour, onEdit, onToggleStatus }) {
         </div>
 
         <div className="flex items-center gap-2 border-t border-border pt-4">
-          <a
-            href={`tel:${labour.mobile}`}
-            className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-semibold text-fg transition-colors hover:bg-background sm:h-10 sm:flex-none"
-          >
-            <Phone className="h-4 w-4" aria-hidden="true" />
-            Call
-          </a>
+          {normalizeMobile(labour.mobile) && (
+            <a
+              href={`tel:${labour.mobile}`}
+              className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-semibold text-fg transition-colors hover:bg-background sm:h-10 sm:flex-none"
+            >
+              <Phone className="h-4 w-4" aria-hidden="true" />
+              Call
+            </a>
+          )}
           <Button variant="outline" leftIcon={Pencil} onClick={onEdit} className="flex-1 sm:flex-none">
             Edit
           </Button>

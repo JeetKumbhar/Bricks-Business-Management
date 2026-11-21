@@ -13,10 +13,11 @@ export const labourSchema = z
   .object({
     labourType: z.enum([LABOUR_TYPES.BIGARI, LABOUR_TYPES.MAAPVALI, LABOUR_TYPES.PATLAVALE]),
     name: z.string().trim().min(2, "Name is required").max(60, "Name is too long"),
+    // Optional (a worker may have no phone) and not unique (family members may share one). When given it must still be 10 digits.
     mobile: z
       .string()
       .trim()
-      .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
+      .refine((v) => v === "" || /^[6-9]\d{9}$/.test(v), "Enter a valid 10-digit mobile number"),
     village: z.string().trim().min(1, "Village is required").max(60, "Village name is too long"),
     joiningDate: z.string().min(1, "Joining date is required"),
     rate: z.string().trim(),

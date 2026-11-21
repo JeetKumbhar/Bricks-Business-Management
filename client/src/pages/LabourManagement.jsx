@@ -18,7 +18,7 @@ export default function LabourManagement() {
   const navigate = useNavigate();
   const toast = useToast();
   // allLabours = every worker and team (all three types)
-  const { allLabours: labours, addLabour, updateLabour, isMobileTaken } = useLabours();
+  const { allLabours: labours, addLabour, updateLabour } = useLabours();
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
@@ -146,7 +146,6 @@ export default function LabourManagement() {
       <AddLabourModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        isMobileTaken={(mobile) => isMobileTaken(mobile)}
         onSubmit={handleAdd}
         saving={saving}
       />
@@ -154,7 +153,6 @@ export default function LabourManagement() {
       <EditLabourModal
         labour={editing}
         onClose={() => setEditing(null)}
-        isMobileTaken={(mobile) => isMobileTaken(mobile, editing?.id)}
         onSubmit={handleEdit}
         saving={saving}
       />

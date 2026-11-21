@@ -203,12 +203,12 @@ describe("create validation", () => {
     await bad(bigari({ mobile: { $gt: "" } }));
   });
 
-  it("rejects a duplicate mobile number (409) and still counts ids up", async () => {
+  it("accepts the same mobile number for another worker (numbers are shared, the worker id is the identity)", async () => {
     await create(bigari());
     const res = await asOwner("post", "/api/labours", maapvali({ mobile: "9876543210" }));
-    expect(res.status).toBe(409);
-    expect(res.body.errors[0].field).toBe("mobile");
-    expect(db.labours.size).toBe(1);
+    expect(res.status).toBe(201);
+    expect(db.labours.size).toBe(2);
+    expect(res.body.data.id).toBe("L-002");
   });
 });
 
@@ -243,11 +243,14 @@ describe("Batch 1B: a worker and the first rate are saved TOGETHER or not at all
     expect(db.rates).toHaveLength(0);
   });
 
-  it("a duplicate mobile number is a 409 and leaves no worker and no rate", async () => {
+  it("an old database that still has the unique mobile index refuses the second worker with a clear 409 and leaves no worker and no rate", async () => {
     await create(bigari());
+    db.legacyUniqueMobile = true; // simulates the old unique mobile_1 index
     const before = { labours: db.labours.size, rates: db.rates.length };
     const res = await asOwner("post", "/api/labours", bigari()); // the same mobile again
     expect(res.status).toBe(409);
+    expect(res.body.errors[0]).toMatchObject({ field: "mobile" });
+    expect(res.body.message).toContain("old one-worker-per-mobile-number rule");
     expect({ labours: db.labours.size, rates: db.rates.length }).toEqual(before);
   });
 
@@ -451,12 +454,13 @@ describe("editing and deactivating", () => {
     expect((await asOwner("patch", "/api/labours/L-404", { village: "X" })).status).toBe(404);
   });
 
-  it("keeps mobile numbers unique across edits", async () => {
+  it("lets an edit use a number another worker already has, and keep its own", async () => {
     await create(bigari());
     const b = await create(maapvali());
     const res = await asOwner("patch", `/api/labours/${b.id}`, { mobile: "9876543210" });
-    expect(res.status).toBe(409);
-    expect((await asOwner("patch", `/api/labours/${b.id}`, { mobile: b.mobile, village: "Same" })).status).toBe(200); // own number is fine
+    expect(res.status).toBe(200);
+    expect(res.body.data.mobile).toBe("9876543210");
+    expect((await asOwner("patch", `/api/labours/${b.id}`, { mobile: "9876543210", village: "Same" })).status).toBe(200);
   });
 
   it("deactivates without erasing anything, and records who, when and why", async () => {
@@ -523,8 +527,9 @@ describe("models", () => {
     expect(errorsOf({ ...valid, joiningDate: "2026-13-01" }).joiningDate).toBeDefined();
   });
 
-  it("has a unique mobile index and no rate stored on the labour itself", () => {
-    expect(RealLabour.schema.indexes().some(([f, o]) => f.mobile === 1 && o.unique)).toBe(true);
+  it("has no mobile index (mobile is optional and shared) and no rate stored on the labour itself", () => {
+    expect(RealLabour.schema.indexes().some(([f]) => "mobile" in f)).toBe(false);
+    expect(RealLabour.schema.indexes().some(([f, o]) => f._id === undefined && o.unique && "mobile" in f)).toBe(false);
     for (const field of ["dailyRate", "ratePerFourMaaps", "ratePer1000PayableBricks", "rate"]) expect(RealLabour.schema.path(field)).toBeUndefined();
   });
 

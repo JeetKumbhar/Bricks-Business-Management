@@ -11,6 +11,7 @@ import TeamProductionCard from "../../production/TeamProductionCard";
 import MaapWorkHistoryCard from "../../work/maapvali/MaapWorkHistoryCard";
 import LabourAvatar from "../LabourAvatar";
 import LabourTypeBadge from "../LabourTypeBadge";
+import { normalizeMobile } from "../../utils/mobile";
 
 function Row({ label, children }) {
   return (
@@ -82,9 +83,13 @@ export default function OtherTypeProfile({ worker }) {
             <dl className="divide-y divide-border text-sm">
               <Row label="Labour Type">{meta.label}</Row>
               <Row label={meta.mobileLabel}>
-                <a href={`tel:${worker.mobile}`} className="text-primary">
-                  {worker.mobile}
-                </a>
+                {normalizeMobile(worker.mobile) ? (
+                  <a href={`tel:${worker.mobile}`} className="text-primary">
+                    {worker.mobile}
+                  </a>
+                ) : (
+                  "Not given"
+                )}
               </Row>
               <Row label="Village">{worker.village}</Row>
               <Row label="Joining Date">{formatDate(worker.joiningDate)}</Row>

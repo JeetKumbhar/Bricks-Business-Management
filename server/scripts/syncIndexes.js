@@ -20,6 +20,8 @@ import "../models/ProductionEntry.js";
 import "../models/Season.js";
 import "../models/SeasonSettlement.js";
 import "../models/SettlementStatement.js";
+import "../models/SettlementDecision.js";
+import "../models/SettlementLock.js";
 import "../models/Truck.js";
 import "../models/TruckStatusHistory.js";
 import "../models/TruckTrip.js";

@@ -36,7 +36,7 @@ export const filterLabours = (labours, { search = "", status = "ALL", type = "AL
     if (!q) return true;
     return (
       l.name.toLowerCase().includes(q) ||
-      l.mobile.includes(q) ||
+      (l.mobile ?? "").includes(q) ||
       l.id.toLowerCase().includes(q) ||
       LABOUR_TYPE_META[l.labourType].label.toLowerCase().includes(q) // typing "patlavale" or "maapvali" finds that type
     );

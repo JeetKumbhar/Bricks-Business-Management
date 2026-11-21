@@ -43,6 +43,12 @@ const paymentSchema = createSchema({
   reference: { type: String, trim: true, maxlength: MAX_REFERENCE_LENGTH, default: "" },
   note: { type: String, trim: true, maxlength: MAX_NOTE_LENGTH, default: "" },
   requestId: { type: String, default: null, immutable: true },
+  // Final-settlement link. Set ONLY by the settlement payment operation; absent on every ordinary and every historical payment.
+  // `date` stays the LEDGER date (the season end date, so the books of the season balance); `paidOn` is the day the money was actually paid.
+  seasonId: { type: String, immutable: true },
+  settlementId: { type: String, immutable: true },
+  statementId: { type: String, immutable: true },
+  paidOn: businessDateField({ immutable: true }),
   revision: { type: Number, default: 1, min: 1 },
   history: { type: [correctionSchema], default: [] },
   ...softDeleteFields(),
@@ -54,5 +60,6 @@ const paymentSchema = createSchema({
 paymentSchema.index({ requestId: 1 }, { unique: true, partialFilterExpression: { requestId: { $type: "string" } } });
 paymentSchema.index({ recipientId: 1, date: -1 });
 paymentSchema.index({ date: -1 });
+paymentSchema.index({ statementId: 1 }, { partialFilterExpression: { statementId: { $type: "string" } } });
 
 export default mongoose.models.Payment || mongoose.model("Payment", paymentSchema);

@@ -259,6 +259,7 @@ describe("duplicate submissions", () => {
     db.beforePaymentCreate = () => {
       db.beforePaymentCreate = null;
       db.payments.set("winner", { _id: "winner", recipientId: w.id, recipientType: "WORKER", type: "SALARY_PAYMENT", amountPaise: 80000, date: today, method: "CASH", requestId: "pay-req-0003", revision: 1, isDeleted: false, history: [], createdAt: new Date(), updatedAt: new Date() });
+      db.resnapshot(); // the rival's payment is already committed: our transaction's rollback must not undo it
     };
     const res = await asOwner("post", "/api/payments", body);
     expect(res.status).toBe(200);
@@ -366,6 +367,7 @@ describe("correcting a payment", () => {
       const found = [...db.payments.values()].find((r) => r._id === String(filter._id));
       found.revision += 1;
       found.amountPaise = 999900;
+      db.resnapshot(); // the rival's change is already committed
     };
     expect((await asOwner("patch", `/api/payments/${p.id}`, { amount: 1200, reason: "Fix it" })).status).toBe(409);
     expect(liveRows()[0].amountPaise).toBe(999900);

@@ -10,6 +10,7 @@ import LabourAvatar from "./LabourAvatar";
 import LabourCard from "./LabourCard";
 import { getWorkSummary } from "./labourSummaries";
 import LabourTypeBadge from "./LabourTypeBadge";
+import { mobileText } from "../../utils/mobile";
 
 const PAGE_SIZE = 10;
 
@@ -53,7 +54,7 @@ export default function LabourTable({
       ),
     },
     { key: "type", header: "Type", render: (l) => <LabourTypeBadge type={l.labourType} /> },
-    { key: "mobile", header: "Mobile" },
+    { key: "mobile", header: "Mobile", render: (l) => mobileText(l.mobile) },
     { key: "rate", header: "Rate", render: (l) => formatRate(l) },
     {
       key: "status",

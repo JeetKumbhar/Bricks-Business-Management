@@ -125,7 +125,6 @@ export function LabourProvider({ children }) {
     [patch]
   );
 
-  const isMobileTaken = useCallback((mobile, excludeId) => data.labours.some((l) => l.mobile === mobile && l.id !== excludeId), [data.labours]);
 
   /** Adds a rate-history row on the server (earlier rows and the work priced with them never change). */
   const changeRate = useCallback(
@@ -322,6 +321,9 @@ export function LabourProvider({ children }) {
     [patch]
   );
 
+  /** The Seasons screen read a fresh list (or changed one): keep this store, which the production date banner reads, in step. */
+  const replaceSeasons = useCallback((list) => patch("seasons", () => list), [patch]);
+
   // ---- Lookups ------------------------------------------------------------------------------------------------------
 
   const getLabour = useCallback((id) => labours.find((l) => l.id === id), [labours]);
@@ -344,7 +346,6 @@ export function LabourProvider({ children }) {
       allLabours,
       addLabour,
       updateLabour,
-      isMobileTaken,
       changeRate,
       loadRateHistory,
       isRateHistoryLoaded,
@@ -371,9 +372,10 @@ export function LabourProvider({ children }) {
       seasons: data.seasons,
       seasonForDate,
       createSeason,
+      replaceSeasons,
       getRateHistory,
     }),
-    [status, loadError, reload, dataVersion, labours, allLabours, addLabour, updateLabour, isMobileTaken, changeRate, loadRateHistory, isRateHistoryLoaded, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, deletedPayments, addPayment, updatePayment, deletePayment, allMaapEntries, getMaapEntries, updateMaapEntry, deleteMaapEntry, saveMaapDay, allProductionEntries, saveProductionDay, updateProductionEntry, deleteProductionEntry, data.seasons, seasonForDate, createSeason, getRateHistory]
+    [status, loadError, reload, dataVersion, labours, allLabours, addLabour, updateLabour, changeRate, loadRateHistory, isRateHistoryLoaded, getLabour, getAnyLabour, getAttendance, getAttendanceByDate, saveAttendance, getPayments, allPayments, deletedPayments, addPayment, updatePayment, deletePayment, allMaapEntries, getMaapEntries, updateMaapEntry, deleteMaapEntry, saveMaapDay, allProductionEntries, saveProductionDay, updateProductionEntry, deleteProductionEntry, data.seasons, seasonForDate, createSeason, replaceSeasons, getRateHistory]
   );
 
   return <LabourContext.Provider value={value}>{children}</LabourContext.Provider>;

@@ -18,7 +18,7 @@ vi.hoisted(() => {
   process.env.MONGODB_URI = "";
 });
 
-const { db, makeAttendanceModel, makeCounterModel, makeLabourModel, makeMaapEntryModel, makeRateModel } = await import("./helpers/memoryDb.js");
+const { db, makeAttendanceModel, makeCounterModel, makeLabourModel, makeMaapEntryModel, makeRateModel, makeSeasonModel } = await import("./helpers/memoryDb.js");
 const users = vi.hoisted(() => ({ list: [] }));
 // Fake transaction: snapshot, run, and on failure roll back to the snapshot but KEEP what a rival committed outside the transaction.
 // A transient error ("TransientTransactionError") re-runs the work, like session.withTransaction does.
@@ -32,6 +32,7 @@ vi.mock("../models/User.js", () => ({
 vi.mock("../models/Counter.js", () => ({ default: makeCounterModel() }));
 vi.mock("../utils/transaction.js", () => ({
   runInTransaction: async (work) => {
+    if (txn.active) return work(null); // the rival PATCH is another request: its own transaction commits on its own, outside the batch's (it is not nested in a real database)
     for (let attempt = 1; attempt <= 8; attempt += 1) {
       txn.attempts += 1;
       const snapshot = new Map([...db.maap].map(([k, v]) => [k, structuredClone(v)]));
@@ -54,6 +55,7 @@ vi.mock("../utils/transaction.js", () => ({
 }));
 vi.mock("../models/Labour.js", async (importOriginal) => ({ default: makeLabourModel((await importOriginal()).default) }));
 vi.mock("../models/LabourRateHistory.js", async (importOriginal) => ({ default: makeRateModel((await importOriginal()).default) }));
+vi.mock("../models/Season.js", async (importOriginal) => ({ default: makeSeasonModel((await importOriginal()).default) }));
 vi.mock("../models/Attendance.js", () => ({ default: makeAttendanceModel() }));
 vi.mock("../models/MaapEntry.js", () => ({ default: makeMaapEntryModel() }));
 
@@ -67,7 +69,7 @@ const { addDays, todayBusinessDate } = await import("../utils/dates.js");
 const { correctionSchema, saveDaySchema } = await import("../validators/maapEntry.validators.js");
 const FakeMaapEntry = (await import("../models/MaapEntry.js")).default;
 const harness = await import("../scripts/lib/raceHarness.js");
-const { AMOUNTS, CASES, FIXTURE, applyIndexSafety, bodies, checkAtlasGuards, indexSafetyProblem, parseDbName, preflight, runCase, runRace, shutdownServer } = harness;
+const { AMOUNTS, CASES, FIXTURE, applyIndexSafety, bodies, checkAtlasGuards, indexSafetyProblem, parseDbName, preflight, runCase, runGuarded, runPreflight, runRace, shutdownServer } = harness;
 
 // Emulates MongoDB's behaviour for a write inside a transaction whose snapshot predates a committed rival write: a transient
 // WriteConflict (the transaction is retried). The very first operation of an attempt takes its snapshot afterwards, so it simply
@@ -695,5 +697,148 @@ describe("cleanup: connections are destroyed before the listener closes, on ever
       const text = readFileSync(new URL(file, import.meta.url), "utf8").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
       for (const risky of [/deleteOne|deleteMany|\.drop\(|dropDatabase|dropIndex|createIndex|syncIndexes|findOneAndDelete|\.remove\(/, /api\("delete"/i, /"delete"/]) expect(text, `${file} ${risky}`).not.toMatch(risky);
     }
+  });
+});
+
+describe("the read-only preflight runs BEFORE the owner login (the login writes lastLoginAt)", () => {
+  const readOnly = () => {
+    const { api: _api, MaapEntry: _model, ...reads } = makeDeps();
+    return reads;
+  };
+  const fixtureWorker = (key, over = {}) => manualWorker({ name: FIXTURE.workers[key].name, mobile: FIXTURE.workers[key].mobile, ...over });
+  const guardedRun = ({ login = "ok", order = [], reads = readOnly() } = {}) => {
+    const logged = { count: 0 };
+    const startAndLogin = vi.fn(async () => {
+      logged.count += 1;
+      order.push("login");
+      return login === "ok" ? { ...makeDeps(), log: undefined } : { refused: "the TEST owner login returned HTTP 401. Nothing else was written." };
+    });
+    return { run: () => runGuarded({ readDeps: reads, startAndLogin, opts: OPTS() }), startAndLogin, logged, order };
+  };
+
+  it("the runner starts the app and logs in only inside startAndLogin, which only runGuarded calls (after the preflight)", () => {
+    const source = readFileSync(new URL("../scripts/verifyRace.js", import.meta.url), "utf8");
+    const open = source.indexOf("const startAndLogin = async");
+    const close = source.indexOf("const result = await runGuarded(");
+    expect(open).toBeGreaterThan(-1);
+    expect(close).toBeGreaterThan(open);
+    const outside = source.slice(0, open) + source.slice(close);
+    for (const text of ['await import("../app.js")', "/api/auth/login", "server.listen", "http.createServer"]) {
+      expect(source.slice(open, close), text).toContain(text); // inside the function
+      expect(outside.replace(/^\s*\/\/.*$/gm, ""), text).not.toContain(text); // and nowhere else (comments ignored)
+    }
+    expect(source.indexOf('await import("../models/MaapEntry.js")')).toBeLessThan(open); // models, for the preflight reads, come first
+    expect(source).toMatch(/runGuarded\(\{ readDeps, startAndLogin/);
+  });
+
+  it("preflight refuses (collision): the login function is NEVER called and nothing is written", async () => {
+    await manualWorker({ name: "Someone Else", mobile: FIXTURE.workers.Y.mobile });
+    const before = JSON.stringify({ l: [...db.labours.values()], m: [...db.maap.values()], r: db.rates, c: db.counters });
+    apiCalls = [];
+    const g = guardedRun();
+    const result = await g.run();
+    expect(result).toMatchObject({ verdict: "REFUSED", loggedIn: false, cases: [] });
+    expect(result.reason).toMatch(/COLLISION/);
+    expect(g.startAndLogin).not.toHaveBeenCalled();
+    expect(apiCalls).toEqual([]);
+    expect(JSON.stringify({ l: [...db.labours.values()], m: [...db.maap.values()], r: db.rates, c: db.counters })).toBe(before);
+  });
+
+  it("preflight refuses (a case date already used, including a deleted entry): no login, no write", async () => {
+    const x = await fixtureWorker("X");
+    await fixtureWorker("Y");
+    await send("put", `/api/maap-entries/day/${OPTS().dates[1]}`, owner.cookie, { reason: "pre-existing", rows: [{ labourId: x, maaps: 3 }] });
+    apiCalls = [];
+    const g = guardedRun();
+    const result = await g.run();
+    expect(result).toMatchObject({ verdict: "REFUSED", loggedIn: false });
+    expect(result.reason).toContain(`on ${OPTS().dates[1]}`);
+    expect(g.startAndLogin).not.toHaveBeenCalled();
+    expect(apiCalls).toEqual([]);
+  });
+
+  it("preflight refuses (bad dates): no login", async () => {
+    const g = guardedRun();
+    const result = await runGuarded({ readDeps: readOnly(), startAndLogin: g.startAndLogin, opts: { ...OPTS(), dates: [today, daysAgo(3), daysAgo(4)] } });
+    expect(result).toMatchObject({ verdict: "REFUSED", loggedIn: false });
+    expect(g.startAndLogin).not.toHaveBeenCalled();
+  });
+
+  it("the preflight needs NO login and NO api: it runs with read functions only", async () => {
+    const scan = await runPreflight(readOnly(), OPTS());
+    expect(scan.approved).toBe(true);
+    expect(Object.keys(readOnly()).sort()).toEqual(["MaapEntry", "readEntries", "readLabours", "readRates", "today"].filter((k) => k !== "MaapEntry").sort());
+    expect(apiCalls).toEqual([]);
+  });
+
+  it("clean preflight: login happens exactly once, AFTER every preflight read, and BEFORE the first write; the run then PASSES", async () => {
+    const order = [];
+    const base = readOnly();
+    const reads = {
+      ...base,
+      readLabours: (f) => { order.push("read:labours"); return base.readLabours(f); },
+      readRates: (id) => { order.push("read:rates"); return base.readRates(id); },
+      readEntries: (q) => { order.push("read:entries"); return base.readEntries(q); },
+    };
+    const logged = { count: 0 };
+    const startAndLogin = vi.fn(async () => {
+      order.push("login");
+      logged.count += 1;
+      const deps = makeDeps();
+      return { ...deps, api: (m, u, b) => { order.push(`api:${m.toLowerCase()}`); return deps.api(m, u, b); }, readLabours: reads.readLabours, readRates: reads.readRates, readEntries: reads.readEntries };
+    });
+    const result = await runGuarded({ readDeps: reads, startAndLogin, opts: OPTS() });
+    expect(result.verdict).toBe("PASS");
+    expect(result.loggedIn).toBe(true);
+    expect(startAndLogin).toHaveBeenCalledTimes(1);
+    const login = order.indexOf("login");
+    expect(order.slice(0, login).every((o) => o.startsWith("read:"))).toBe(true); // nothing but reads before the login
+    expect(order.slice(0, login).filter((o) => o === "read:labours")).toHaveLength(4); // the complete worker scan is done
+    expect(order.findIndex((o) => o.startsWith("api:"))).toBeGreaterThan(login); // every write goes through the API, after the login
+  });
+
+  it("login failure after a clean preflight: REFUSED, no fixture and no entry written", async () => {
+    const g = guardedRun({ login: "fail" });
+    const result = await g.run();
+    expect(result).toMatchObject({ verdict: "REFUSED", loggedIn: false, cases: [] });
+    expect(result.reason).toMatch(/login returned HTTP 401/);
+    expect(g.startAndLogin).toHaveBeenCalledTimes(1);
+    expect(db.labours.size).toBe(0);
+    expect(db.maap.size).toBe(0);
+  });
+
+  it("the approved preflight is reused: no second scan of the workers (existing workers: 4 worker reads and 2 rate reads in total, not 8 and 4)", async () => {
+    await fixtureWorker("X");
+    await fixtureWorker("Y");
+    const count = { labours: 0, rates: 0, entries: 0 };
+    const base = makeDeps();
+    const counted = {
+      ...base,
+      readLabours: (f) => { count.labours += 1; return base.readLabours(f); },
+      readRates: (id) => { count.rates += 1; return base.readRates(id); },
+      readEntries: (q) => { count.entries += 1; return base.readEntries(q); },
+    };
+    const { api: _a, MaapEntry: _m, ...reads } = counted;
+    const result = await runGuarded({ readDeps: reads, startAndLogin: async () => counted, opts: OPTS() });
+    expect(result.verdict).toBe("PASS");
+    expect(count.labours).toBe(4); // the preflight's; the run did not scan again
+    expect(count.rates).toBe(2);
+    expect(count.entries).toBe(23); // 6 preflight pair-scans + the cases' own per-case date check, seed/rival verification and final-state reads
+  });
+
+  it("result classifications are unchanged when started through runGuarded (an unexpected batch response is still FAIL)", async () => {
+    const dates = OPTS().dates;
+    const base = makeDeps();
+    const deps = {
+      ...base,
+      api: async (method, url, body) => {
+        const real = await base.api(method, url, body);
+        return method.toLowerCase() === "put" && url.endsWith(dates[1]) && body.reason === FIXTURE.reasons.batch ? { status: 500, body: { success: false } } : real;
+      },
+    };
+    const { api: _a, MaapEntry: _m, ...reads } = deps;
+    const result = await runGuarded({ readDeps: reads, startAndLogin: async () => deps, opts: OPTS() });
+    expect(result.verdict).toBe("FAIL");
+    expect(result.cases.find((c) => c.id === "R2").fails.join(" ")).toMatch(/batchHttp409/);
   });
 });

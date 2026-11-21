@@ -5,11 +5,11 @@ import LabourForm from "./LabourForm";
 const FORM_ID = "add-labour-form";
 
 /**
- * <AddLabourModal open onClose isMobileTaken onSubmit={(values) => ...} saving />
+ * <AddLabourModal open onClose onSubmit={(values) => ...} saving />
  * values: { labourType, name, mobile, village, joiningDate, rate (number), status }
  * The labour ID is made by the server when the record is saved. The form is only mounted while the modal is open, so it resets every time.
  */
-export default function AddLabourModal({ open, onClose, isMobileTaken, onSubmit, saving = false }) {
+export default function AddLabourModal({ open, onClose, onSubmit, saving = false }) {
   return (
     <Modal
       open={open}
@@ -32,7 +32,6 @@ export default function AddLabourModal({ open, onClose, isMobileTaken, onSubmit,
         formId={FORM_ID}
         mode="add"
         labourId="Assigned when saved"
-        isMobileTaken={isMobileTaken}
         onSubmit={onSubmit}
         defaultValues={{
           labourType: "BIGARI",

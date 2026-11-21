@@ -5,6 +5,8 @@ import Payment from "../models/Payment.js";
 import ApiError from "../utils/ApiError.js";
 import { isFutureBusinessDate, todayBusinessDate } from "../utils/dates.js";
 import { paiseToRupees, rupeesToPaise } from "../utils/money.js";
+import { runInTransaction } from "../utils/transaction.js";
+import { assertDatesOpen, guardWrite } from "./writeGuard.js";
 import { summarizePayments } from "./paymentCalculations.js";
 
 // Payments = money transactions to a worker or a Patlavale team. Rules for this module:
@@ -19,6 +21,7 @@ import { summarizePayments } from "./paymentCalculations.js";
 const fieldError = (status, message, field) => new ApiError(status, message, [{ field, message }]);
 const isDuplicateKey = (err) => err?.code === 11000;
 const live = { isDeleted: false };
+const ORDINARY_PAYMENTS = "Ordinary payments (Bayana, salary and other)";
 
 // ---------- Output shapes (the frontend's own field names; money in rupees) ----------
 
@@ -34,6 +37,7 @@ export const toPaymentDto = (row) => ({
   method: row.method,
   reference: row.reference ?? "",
   note: row.note ?? "",
+  ...(row.settlementId ? { settlement: { seasonId: row.seasonId, settlementId: row.settlementId, statementId: row.statementId, ledgerDate: row.date, paidOn: row.paidOn ?? null } } : {}),
   revision: row.revision ?? 1,
   corrected: (row.revision ?? 1) > 1,
   isDeleted: Boolean(row.isDeleted),
@@ -42,7 +46,7 @@ export const toPaymentDto = (row) => ({
   updatedAt: row.updatedAt,
 });
 
-const toDetailDto = (row) => ({
+export const toDetailDto = (row) => ({
   ...toPaymentDto(row),
   revisions: (row.history ?? []).map(({ at, by, reason, before }) => ({
     at,
@@ -92,9 +96,9 @@ export const getRecipientHistory = async (recipientId, query = {}) => {
 
 // ---------- Write: create ----------
 
-const core = (p) => [p.recipientId, p.type, p.amountPaise, p.date].join("|");
+export const core = (p) => [p.recipientId, p.type, p.amountPaise, p.date].join("|");
 
-const checkRecipientRules = ({ labour, type, date, note, now }) => {
+export const checkRecipientRules = ({ labour, type, date, note, now }) => {
   if (isFutureBusinessDate(date, now)) throw fieldError(400, `The date cannot be in the future (today is ${todayBusinessDate(now)})`, "date");
   if (type !== PAYMENT_TYPES.BOOKING_ADVANCE && labour.joiningDate > date) throw fieldError(400, `Joined on ${labour.joiningDate}. Only a Bayana can be dated before joining.`, "date");
   if (type === PAYMENT_TYPES.OTHER && !note) throw fieldError(400, "A note is required for Other payments", "note");
@@ -126,21 +130,35 @@ export const createPayment = async (input, actor, now = new Date()) => {
     if (recent) throw fieldError(409, "An identical payment was just saved. Send a requestId to retry safely, or wait a moment if it is a second payment.", "amount");
   }
 
+  // Closed-season guard: an ordinary payment dated inside a CLOSED season is refused (clear early error here, re-checked inside the write's transaction).
+  await assertDatesOpen([input.date], ORDINARY_PAYMENTS);
+
   const actorId = actor.id ?? null;
   try {
-    const created = await Payment.create({
-      ...candidate,
-      recipientType: labour.labourType === LABOUR_TYPES.PATLAVALE ? RECIPIENT_TYPES.TEAM : RECIPIENT_TYPES.WORKER,
-      method: input.method ?? "CASH",
-      reference: input.reference ?? "",
-      note,
-      requestId,
-      revision: 1,
-      history: [],
-      isDeleted: false,
-      createdBy: actorId,
-      updatedBy: actorId,
-    });
+    const [created] = await runInTransaction(
+      async (session) => {
+        await guardWrite([input.date], ORDINARY_PAYMENTS, session);
+        return Payment.create(
+          [
+            {
+              ...candidate,
+              recipientType: labour.labourType === LABOUR_TYPES.PATLAVALE ? RECIPIENT_TYPES.TEAM : RECIPIENT_TYPES.WORKER,
+              method: input.method ?? "CASH",
+              reference: input.reference ?? "",
+              note,
+              requestId,
+              revision: 1,
+              history: [],
+              isDeleted: false,
+              createdBy: actorId,
+              updatedBy: actorId,
+            },
+          ],
+          session ? { session } : undefined
+        );
+      },
+      { required: true }
+    );
     return { payment: toDetailDto(created.toObject({ transform: false })), replayed: false };
   } catch (err) {
     if (isDuplicateKey(err) && requestId) {
@@ -158,6 +176,11 @@ export const correctPayment = async (id, changes, actor, now = new Date()) => {
   const payment = await loadPayment(id);
   if (payment.isDeleted) throw ApiError.conflict("A voided payment cannot be corrected");
 
+  // A final-settlement payment's amount, type and ledger date are fixed: its balance rules were checked when it was recorded. A wrong one is
+  // voided (with a reason, kept in the history) and recorded again, which checks the remaining balance again. Method, reference and note can be corrected.
+  if (payment.settlementId && [changes.type, changes.amount, changes.date].some((v) => v !== undefined)) {
+    throw ApiError.conflict("A final settlement payment's type, amount and date cannot be corrected. Void it with a reason and record it again.");
+  }
   const next = {
     type: changes.type ?? payment.type,
     amountPaise: changes.amount === undefined ? payment.amountPaise : rupeesToPaise(changes.amount),
@@ -173,23 +196,34 @@ export const correctPayment = async (id, changes, actor, now = new Date()) => {
   checkRecipientRules({ labour: labour ?? { joiningDate: "0000-01-01" }, type: next.type, date: next.date, note: next.note, now });
 
   const actorId = actor.id ?? null;
-  const result = await Payment.updateOne(
-    { _id: payment._id, revision: payment.revision, ...live },
-    {
-      $set: { ...next, updatedBy: actorId },
-      $inc: { revision: 1 },
-      $push: {
-        history: {
-          at: now,
-          by: actor.name,
-          byId: actorId,
-          reason: changes.reason,
-          before: { type: payment.type, amountPaise: payment.amountPaise, date: payment.date, method: payment.method, reference: payment.reference ?? "", note: payment.note ?? "" },
+  // An ordinary payment cannot leave or enter a closed season (both its old and its new date are checked). A settlement payment is exempt: it is
+  // the one kind of payment that belongs to a closed season, and its amount, type and date are already fixed above.
+  const guarded = payment.settlementId ? [] : [payment.date, next.date];
+  if (guarded.length) await assertDatesOpen(guarded, ORDINARY_PAYMENTS);
+  await runInTransaction(
+    async (session) => {
+      if (guarded.length) await guardWrite(guarded, ORDINARY_PAYMENTS, session);
+      const result = await Payment.updateOne(
+        { _id: payment._id, revision: payment.revision, ...live },
+        {
+          $set: { ...next, updatedBy: actorId },
+          $inc: { revision: 1 },
+          $push: {
+            history: {
+              at: now,
+              by: actor.name,
+              byId: actorId,
+              reason: changes.reason,
+              before: { type: payment.type, amountPaise: payment.amountPaise, date: payment.date, method: payment.method, reference: payment.reference ?? "", note: payment.note ?? "" },
+            },
+          },
         },
-      },
-    }
+        session ? { session } : undefined
+      );
+      if (result.matchedCount !== 1) throw ApiError.conflict("This payment was changed by someone else. Reload and try again.");
+    },
+    { required: true }
   );
-  if (result.matchedCount !== 1) throw ApiError.conflict("This payment was changed by someone else. Reload and try again.");
   return getPayment(id);
 };
 
@@ -197,10 +231,21 @@ export const correctPayment = async (id, changes, actor, now = new Date()) => {
 export const voidPayment = async (id, { reason }, actor, now = new Date()) => {
   const payment = await loadPayment(id);
   if (payment.isDeleted) throw ApiError.conflict("This payment is already voided");
-  const result = await Payment.updateOne(
-    { _id: payment._id, ...live },
-    { $set: { isDeleted: true, deletedAt: now, deletedBy: actor.name, deletedReason: reason, updatedBy: actor.id ?? null }, $inc: { revision: 1 } }
+  // Voiding an ordinary payment inside a closed season would change that season's books, so it is refused. A settlement payment can always be voided
+  // (that reopens the worker's remaining balance).
+  const guarded = payment.settlementId ? [] : [payment.date];
+  if (guarded.length) await assertDatesOpen(guarded, ORDINARY_PAYMENTS);
+  await runInTransaction(
+    async (session) => {
+      if (guarded.length) await guardWrite(guarded, ORDINARY_PAYMENTS, session);
+      const result = await Payment.updateOne(
+        { _id: payment._id, ...live },
+        { $set: { isDeleted: true, deletedAt: now, deletedBy: actor.name, deletedReason: reason, updatedBy: actor.id ?? null }, $inc: { revision: 1 } },
+        session ? { session } : undefined
+      );
+      if (result.matchedCount !== 1) throw ApiError.conflict("This payment was changed by someone else. Reload and try again.");
+    },
+    { required: true }
   );
-  if (result.matchedCount !== 1) throw ApiError.conflict("This payment was changed by someone else. Reload and try again.");
   return getPayment(id);
 };

@@ -22,18 +22,22 @@ vi.mock("../models/User.js", () => ({
 vi.mock("../models/Counter.js", () => ({ default: makeCounterModel() }));
 // The new collections live in two in-memory maps. The fake transaction also restores them if the work throws (all-or-nothing), and runs one
 // transaction at a time (a real database serialises conflicting transactions, and the loser retries against the winner's result).
-const settle = vi.hoisted(() => ({ settlements: new Map(), statements: new Map(), queue: Promise.resolve(), failStatementAt: null }));
+const settle = vi.hoisted(() => ({ settlements: new Map(), statements: new Map(), decisions: new Map(), locks: new Map(), queue: Promise.resolve(), failStatementAt: null }));
 vi.mock("../utils/transaction.js", () => ({
   runInTransaction: (work) => {
     const run = settle.queue.then(async () => {
-      const saved = [new Map(settle.settlements), new Map(settle.statements)];
+      const saved = [new Map(settle.settlements), new Map(settle.statements), new Map(settle.decisions), new Map(settle.locks)];
       try {
         return await db.transaction(() => work(null));
       } catch (err) {
         settle.settlements.clear();
         settle.statements.clear();
+        settle.decisions.clear();
+        settle.locks.clear();
         for (const [k, v] of saved[0]) settle.settlements.set(k, v);
         for (const [k, v] of saved[1]) settle.statements.set(k, v);
+        for (const [k, v] of saved[2]) settle.decisions.set(k, v);
+        for (const [k, v] of saved[3]) settle.locks.set(k, v);
         throw err;
       }
     });
@@ -57,6 +61,11 @@ vi.mock("../models/SettlementStatement.js", async (importOriginal) => {
     }),
   };
 });
+vi.mock("../models/SettlementDecision.js", async (importOriginal) => {
+  const original = await importOriginal();
+  return { ...original, default: makeDocModel(original.default, settle.decisions, { unique: (row, rows) => rows.some((r) => r.statementId === row.statementId) }) };
+});
+vi.mock("../models/SettlementLock.js", () => ({ default: {} }));
 vi.mock("../models/Labour.js", async (importOriginal) => ({ default: makeLabourModel((await importOriginal()).default) }));
 vi.mock("../models/LabourRateHistory.js", async (importOriginal) => ({ default: makeRateModel((await importOriginal()).default) }));
 vi.mock("../models/Attendance.js", () => ({ default: makeAttendanceModel() }));
@@ -143,6 +152,8 @@ beforeEach(() => {
   db.reset();
   settle.settlements.clear();
   settle.statements.clear();
+  settle.decisions.clear();
+  settle.locks.clear();
   settle.failStatementAt = null;
   settle.queue = Promise.resolve();
   users.list.length = 0;
@@ -173,7 +184,8 @@ describe("closing a season saves a permanent statement for every included worker
     // The season is closed through this operation, with the confirmed end date.
     expect(seasonRow(season.id)).toMatchObject({ status: "CLOSED", endDate: today, revision: season.revision + 1 });
     // The stored record is the same one the API returns afterwards.
-    expect((await getSettlement(season)).body.data).toEqual(JSON.parse(JSON.stringify(res.body.data)));
+    const stored = (await getSettlement(season)).body.data; // S3 adds derived progress beside the same settlement and statements
+    expect({ settlement: stored.settlement, statements: stored.statements }).toEqual(JSON.parse(JSON.stringify(res.body.data)));
   });
 
   it("keeps the source lines behind each figure, each pointing at the real attendance / Maapvali / production / payment record", async () => {
@@ -439,8 +451,9 @@ describe("snapshots are immutable and permanent", () => {
     const { season, bigari } = await fixture();
     await close(season);
     const saved = JSON.stringify((await getSettlement(season)).body.data);
-    await markAttendance(bigari, 15);
-    await pay(bigari, { amount: 50, date: D(0) });
+    // S4: ordinary entries inside the closed season are refused; only a rate change (not a work or payment record) is still possible
+    expect((await asOwner("put", `/api/attendance/${D(15)}`, { entries: [{ labourId: bigari.id, status: "PRESENT" }], reason: "Late entry" })).status).toBe(409);
+    expect((await asOwner("post", "/api/payments", { recipientId: bigari.id, type: "SALARY_PAYMENT", amount: 50, date: D(0) })).status).toBe(409);
     expect((await changeRate(bigari, 900, D(2))).status).toBe(201);
     expect(JSON.stringify((await getSettlement(season)).body.data)).toBe(saved);
   });
